@@ -6,6 +6,8 @@ import type { DepartmentId, Skill } from "@/lib/types";
 import { departments, allSkills } from "@/data/tree";
 import { brain } from "@/data/departments";
 import { PixelSprite } from "@/components/brand/PixelSprite";
+import { HudRings } from "./HudRings";
+import { useStore } from "@/lib/store";
 import { lineLayout, radialLayout, VIEW, type TreeMode, type TreeNode } from "./layout";
 
 export type Offsets = Record<string, { x: number; y: number }>;
@@ -23,10 +25,20 @@ interface Props {
 
 const deptById = Object.fromEntries(departments.map((d) => [d.id, d]));
 const skillById = Object.fromEntries(allSkills.map((s) => [s.id, s]));
+// deterministic packet routes: a few per department
+const packets = departments.flatMap((d, di) =>
+  [0, 1].map((k) => {
+    const g = d.subGroups[(di + k) % d.subGroups.length];
+    const j = g.skills[(di * 3 + k) % g.skills.length];
+    return { id: `${d.id}-${k}`, dept: d.id, group: g.id, job: j.id, delay: di * 0.7 + k * 3.1, wait: 3 + ((di * 7 + k * 5) % 6) };
+  }),
+);
+
 const spring = { type: "spring" as const, stiffness: 70, damping: 18, mass: 0.9 };
 
 export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, onSelectDept, onSelectJob, onSelectBrain }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const docCount = useStore((st) => st.files).length;
   const wrapRef = useRef<HTMLDivElement>(null);
   const layout = useMemo(() => (mode === "radial" ? radialLayout(departments) : lineLayout(departments)), [mode]);
   const [hoverDept, setHoverDept] = useState<DepartmentId | null>(null);
@@ -170,6 +182,14 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
           />
         </g>
 
+        <HudRings
+          x={pos(byId.brain).x}
+          y={pos(byId.brain).y}
+          visible={mode === "radial" && !editing}
+          jobs={allSkills.length}
+          ready={allSkills.filter((x) => x.readyToRun).length}
+        />
+
         {/* edges */}
         {departments.map((d) => (
           <motion.g key={`edges-${d.id}`} animate={{ opacity: dim(d.id) }} transition={{ duration: 0.25 }}>
@@ -265,6 +285,30 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
           </motion.g>
         ))}
 
+        {/* data packets travelling brain -> department -> group -> job */}
+        {!editing && !drag &&
+          packets.map((pk) => {
+            const b = pos(byId.brain);
+            const dn = byId[pk.dept];
+            const gn = byId[pk.group];
+            const jn = byId[pk.job];
+            if (!dn || !gn || !jn) return null;
+            const d = pos(dn), g = pos(gn), j = pos(jn);
+            const color = deptById[pk.dept].color;
+            return (
+              <motion.circle
+                key={`${pk.id}-${mode}-${Math.round(d.x)}-${Math.round(d.y)}`}
+                r={2.4}
+                fill={color}
+                style={{ filter: `drop-shadow(0 0 4px ${color})` }}
+                initial={{ cx: b.x, cy: b.y, opacity: 0 }}
+                animate={{ cx: [b.x, d.x, g.x, j.x], cy: [b.y, d.y, g.y, j.y], opacity: [0, 1, 1, 0] }}
+                transition={{ duration: 2.6, times: [0, 0.4, 0.7, 1], ease: "easeInOut", repeat: Infinity, repeatDelay: pk.wait, delay: 2 + pk.delay }}
+                pointerEvents="none"
+              />
+            );
+          })}
+
         {/* department nodes */}
         {deptNodes.map((n) => {
           const d = deptById[n.deptId];
@@ -295,7 +339,9 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
                 style={{ filter: `drop-shadow(0 0 ${active ? 16 : 9}px ${d.color}aa)` }}
               />
               <motion.g initial={false} animate={{ x: p.x, y: p.y }} transition={posTransition(d.id)}>
-                <PixelSprite id={d.avatar} cx={0} cy={0} size={active ? 26 : 22} color={d.color} />
+                <motion.g animate={{ y: [0, -3, 0] }} transition={{ duration: 2.4 + (n.order * 10) % 1.5, repeat: Infinity, ease: "easeInOut" }}>
+                  <PixelSprite id={d.avatar} cx={0} cy={0} size={active ? 26 : 22} color={d.color} />
+                </motion.g>
               </motion.g>
             </motion.g>
           );
@@ -336,7 +382,7 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
                 FEED THE BRAIN
               </text>
               <text textAnchor="middle" y={mode === "radial" ? 22 : 19} fontSize={mode === "radial" ? 9 : 7.5} style={{ fill: "#8d8a99" }}>
-                No documents yet
+                {docCount === 0 ? "No documents yet" : `${docCount} document${docCount === 1 ? "" : "s"}`}
               </text>
             </motion.g>
           );
@@ -357,12 +403,34 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
               onClick={() => !editing && onSelectDept(l.deptId)}
               style={{ cursor: "pointer" }}
             >
-              <text textAnchor={l.anchor} fontSize={mode === "radial" ? 16 : 13} letterSpacing={mode === "radial" ? 7 : 5} style={{ fontFamily: "var(--font-display)", fill: hoverDept === l.deptId ? d.color : "var(--fg)", transition: "fill .2s" }}>
+              <rect x={l.anchor === "end" ? -230 : l.anchor === "middle" ? -130 : -10} y={-22} width={l.anchor === "middle" ? 260 : 240} height={52} fill="transparent" />
+              <text
+                textAnchor={l.anchor}
+                fontSize={mode === "radial" ? 16 : 13}
+                letterSpacing={mode === "radial" ? 7 : 5}
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fill: hoverDept === l.deptId ? d.color : "var(--fg)",
+                  filter: hoverDept === l.deptId ? `drop-shadow(0 0 6px ${d.color}) drop-shadow(0 0 14px ${d.color}aa)` : "none",
+                  transition: "fill .2s, filter .2s",
+                }}
+              >
                 {d.name.toUpperCase()}
               </text>
               <text textAnchor={l.anchor} y={mode === "radial" ? 20 : 16} fontSize={mode === "radial" ? 10.5 : 9.5} letterSpacing={0.4} style={{ fill: "var(--muted)" }}>
                 {d.tagline.join(" · ")}
               </text>
+              <motion.text
+                textAnchor={l.anchor}
+                y={mode === "radial" ? 38 : 32}
+                fontSize={9}
+                letterSpacing={3}
+                initial={false}
+                animate={{ opacity: hoverDept === l.deptId ? 1 : 0 }}
+                style={{ fill: d.color, fontFamily: "ui-monospace, monospace" }}
+              >
+                ▸ OPEN {d.readyToRun}/{d.jobs} READY
+              </motion.text>
             </motion.g>
           );
         })}

@@ -151,3 +151,15 @@ body {
 .twinkle {
   animation: twinkle 4.5s ease-in-out infinite;
 }
+
+@keyframes hud-spin { to { transform: rotate(360deg); } }
+@keyframes hud-spin-rev { to { transform: rotate(-360deg); } }
+.hud-spin, .hud-spin-rev {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hud-spin 60s linear infinite;
+}
+.hud-spin-rev { animation-name: hud-spin-rev; }
+@media (prefers-reduced-motion: reduce) {
+  .hud-spin, .hud-spin-rev, .twinkle { animation: none; }
+}

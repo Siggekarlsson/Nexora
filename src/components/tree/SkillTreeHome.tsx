@@ -4,16 +4,19 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Check, ChevronLeft, Pencil, RotateCcw, Wand2 } from "lucide-react";
+import { Check, Pencil, RotateCcw, Wand2 } from "lucide-react";
 import type { DepartmentId, Skill } from "@/lib/types";
 import { SkillTreeMap, type Offsets } from "./SkillTreeMap";
 import { GettingStarted } from "./GettingStarted";
+import { HudPanels } from "./HudPanels";
+import { DepartmentView } from "./DepartmentView";
+import { JobPanel } from "./JobPanel";
 import type { TreeMode } from "./layout";
 import { Composer } from "@/components/chat/Composer";
 import { PixelAvatar } from "@/components/brand/PixelAvatar";
 import { threads } from "@/data/threads";
 import { departmentColors, departmentName } from "@/data/departments";
-import { getDepartment } from "@/data/tree";
+import { allSkills, radialOrder } from "@/data/tree";
 
 const STORAGE_KEY = "nexora.tree.offsets.v1";
 
@@ -24,6 +27,30 @@ export function SkillTreeHome() {
   const [editing, setEditing] = useState(false);
   const [offsets, setOffsets] = useState<Record<TreeMode, Offsets>>({ radial: {}, line: {} });
   const focus = (params.get("dept") as DepartmentId | null) ?? null;
+  const jobId = params.get("job");
+  const job = jobId ? allSkills.find((s) => s.id === jobId) ?? null : null;
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const [showDept, setShowDept] = useState(!!focus);
+  // let the zoom play before showing the department view
+  useEffect(() => {
+    if (!focus) return setShowDept(false);
+    const t = setTimeout(() => setShowDept(true), showDept ? 0 : 650);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+  useEffect(() => {
+    if (!focus) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === "TEXTAREA" || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      const i = radialOrder.indexOf(focus as (typeof radialOrder)[number]);
+      if (e.key === "Escape") openDept(null);
+      if (e.key === "ArrowRight") { setDirection(1); openDept(radialOrder[(i + 1) % radialOrder.length]); }
+      if (e.key === "ArrowLeft") { setDirection(-1); openDept(radialOrder[(i - 1 + radialOrder.length) % radialOrder.length]); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
 
   useEffect(() => {
     try {
@@ -101,8 +128,25 @@ export function SkillTreeHome() {
           onSelectJob={openJob}
           onSelectBrain={() => router.push("/files")}
         />
-        <AnimatePresence>{focus && <DepartmentPreview id={focus} onBack={() => openDept(null)} />}</AnimatePresence>
+        <HudPanels visible={!focus && mode === "radial" && !editing} />
+        <JobPanel skill={focus && showDept ? job : null} onClose={() => openDept(focus)} />
       </div>
+
+      {/* department view covers the whole page */}
+        <AnimatePresence>
+          {focus && showDept && (
+            <motion.div key="dept" className="absolute inset-0 z-30" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.2 } }} transition={{ duration: 0.4 }}>
+              <DepartmentView
+                id={focus}
+                direction={direction}
+                selectedJob={jobId}
+                onBack={() => openDept(null)}
+                onNavigate={(id, dir) => { setDirection(dir); openDept(id); }}
+                onSelectJob={openJob}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       {/* bottom: recent + composer */}
       {(
@@ -155,31 +199,3 @@ export function SkillTreeHome() {
   );
 }
 
-/** Temporary department view — replaced by the full department view in step 3. */
-function DepartmentPreview({ id, onBack }: { id: DepartmentId; onBack: () => void }) {
-  const d = getDepartment(id);
-  if (!d) return null;
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0, transition: { duration: 0.2 } }}
-      transition={{ delay: 0.75, duration: 0.45 }}
-      className="absolute inset-0 z-10 flex flex-col items-center justify-center"
-    >
-      <button onClick={onBack} className="btn btn-glass absolute left-6 top-5">
-        <ChevronLeft size={15} /> All Departments
-      </button>
-      <div className="dept-title pointer-events-none absolute inset-x-0 top-[18%] text-center text-[9vw] leading-none opacity-[0.05]">{d.name}</div>
-      <div
-        className="flex h-20 w-20 items-center justify-center rounded-full"
-        style={{ background: `${d.color}22`, boxShadow: `0 0 0 1px ${d.color}88, 0 0 50px ${d.color}66` }}
-      >
-        <PixelAvatar id={d.id} color={d.color} size={38} />
-      </div>
-      <div className="dept-title mt-5 text-xl">{d.name}</div>
-      <div className="mt-1 text-sm text-muted">{d.tagline.join(" · ")}</div>
-      <div className="mt-6 rounded-full glass px-3 py-1 text-xs text-muted">Department view with sub-groups and job panel comes in step 3</div>
-    </motion.div>
-  );
-}

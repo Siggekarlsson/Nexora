@@ -33,7 +33,7 @@ function build(): Department[] {
           description: description ?? genDescription(name, g.name, seed.name),
           icon: icon ?? g.icon,
           color: seed.color,
-          enabled: name !== "Deal Closer",
+          enabled: readyToRun && name !== "Deal Closer",
           recommended: gi === 0 && si === 0,
           readyToRun,
           owner: "Your team",
