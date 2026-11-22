@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { composioConfigured, composioConnect } from "@/lib/integrations/composio";
 import { GMAIL_SCOPES, gmailConfigured } from "@/lib/integrations/gmail";
 import { newState, origin } from "@/lib/integrations/vault";
 
 export async function GET(req: NextRequest) {
+  if (composioConfigured()) return composioConnect(req, "gmail", origin(req));
   if (!gmailConfigured()) return NextResponse.redirect(`${origin(req)}/integrations?error=gmail_not_configured`);
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   const res = NextResponse.redirect(url);
