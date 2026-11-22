@@ -26,7 +26,7 @@ const initial: AppState = {
   skillEnabled: {},
   customSkills: [],
   trialStarted: false,
-  integrations: { gmail: true },
+  integrations: {},
   schedules: {},
 };
 

@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { integrationContext } from "@/lib/integrations/context";
+import { writeConn } from "@/lib/integrations/vault";
 import type { DepartmentId } from "@/lib/types";
 import { systemPrompt } from "@/lib/agents";
 import { mockReply } from "@/lib/mockReply";
@@ -34,7 +36,7 @@ export async function GET() {
   return NextResponse.json({ provider: p, model });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -45,12 +47,17 @@ export async function POST(req: Request) {
   const messages = body.messages.filter((m) => m.content?.trim());
   while (messages[0]?.role === "assistant") messages.shift();
   const last = messages[messages.length - 1]?.content ?? "";
-  const system = systemPrompt(body.agent, body.skillName);
 
   try {
     const p = provider();
-    if (p === "anthropic") return NextResponse.json({ content: await anthropic(system, messages), provider: p });
-    if (p === "groq") return NextResponse.json({ content: await groq(system, messages), provider: p });
+    if (p !== "mock") {
+      const { context, gmail } = await integrationContext(req, last);
+      const system = systemPrompt(body.agent, body.skillName) + context;
+      const content = p === "anthropic" ? await anthropic(system, messages) : await groq(system, messages);
+      const res = NextResponse.json({ content, provider: p });
+      if (gmail) writeConn(res, "gmail", gmail);
+      return res;
+    }
     await new Promise((r) => setTimeout(r, 700));
     const note = "\n\n_Demo reply: no AI key is configured on the server. Add `GROQ_API_KEY` or `ANTHROPIC_API_KEY` in Vercel and redeploy._";
     return NextResponse.json({ content: mockReply(body.agent, last, body.skillName, body.docCount) + note, provider: p, mock: true });
