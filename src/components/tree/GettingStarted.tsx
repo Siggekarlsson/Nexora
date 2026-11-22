@@ -11,7 +11,7 @@ export function GettingStarted() {
   const [open, setOpen] = useState(false);
   const hasFiles = useStore((st) => st.files).length > 0;
   const integrations = useStore((st) => st.integrations);
-  const connected = Object.entries(integrations).some(([k, v]) => v && k !== "gmail");
+  const connected = Object.entries(integrations).some(([, v]) => v);
   const steps = onboardingSteps.map((s) => ({ ...s, done: s.done || (s.id === "brain" && hasFiles) || (s.id === "integration" && connected) }));
   const done = steps.filter((s) => s.done).length;
   const total = steps.length;
