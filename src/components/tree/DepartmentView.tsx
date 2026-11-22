@@ -8,28 +8,23 @@ import { getDepartment, neighbours } from "@/data/tree";
 import { PixelAvatar } from "@/components/brand/PixelAvatar";
 import { DynamicIcon } from "@/components/ui/DynamicIcon";
 
-const W = 1400;
-const H = 820;
-const C = { x: 700, y: 690 };
-const A0 = 196;
-const A1 = 344;
-const R_HUB = 215;
-const ROWS = [395, 475, 555];
-const RINGS = [130, 215, 305, 395, 475, 555, 640];
+// Arc of the fan, in degrees (180 = left, 270 = up, 360 = right). A little below the horizon on both sides.
+const A0 = 168;
+const A1 = 372;
+const SPACING = 90; // px between job nodes along a row
 
 const rad = (a: number) => (a * Math.PI) / 180;
-const at = (r: number, a: number) => ({ x: C.x + Math.cos(rad(a)) * r, y: C.y + Math.sin(rad(a)) * r });
 
-function useStageScale(ref: React.RefObject<HTMLDivElement | null>) {
-  const [s, setS] = useState(1);
+function useStageSize(ref: React.RefObject<HTMLDivElement | null>) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setS(Math.min(e.contentRect.width / W, e.contentRect.height / H)));
+    const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }));
     ro.observe(el);
     return () => ro.disconnect();
   }, [ref]);
-  return s;
+  return size;
 }
 
 interface Props {
@@ -47,32 +42,46 @@ export function DepartmentView({ id, selectedJob, onBack, onNavigate, onSelectJo
   const pd = getDepartment(prev)!;
   const nd = getDepartment(next)!;
   const wrap = useRef<HTMLDivElement>(null);
-  const scale = useStageScale(wrap);
+  const { w: W, h: H } = useStageSize(wrap);
+  // geometry in real pixels, fitted to the free area between the top controls and the chat bar
+  const C = { x: W / 2, y: H - 92 };
+  const R = Math.max(240, Math.min(C.y - 12, W / 2 - 40));
+  const R_HUB = R * 0.17;
+  const R_LABEL = R * 0.3;
+  const ROW0 = R * 0.52;
+  const ROW_GAP = (R * 0.98 - ROW0) / 3;
+  const RINGS = [R * 0.17, ROW0, ROW0 + ROW_GAP, ROW0 + 2 * ROW_GAP, ROW0 + 3 * ROW_GAP, R * 1.1];
+  const at = (r: number, a: number) => ({ x: C.x + Math.cos(rad(a)) * r, y: C.y + Math.sin(rad(a)) * r });
   const [hover, setHover] = useState<string | null>(null);
 
+  // sizes below are in screen pixels, divided by the stage scale
+  const u = (n: number) => n;
+
   const layout = useMemo(() => {
-    const k = d.subGroups.length;
-    const span = (A1 - A0) / k;
+    const spacing = SPACING;
+    const weights = d.subGroups.map((g) => Math.max(g.skills.length, 3));
+    const total = weights.reduce((a, b) => a + b, 0);
+    let cursor = A0;
     return d.subGroups.map((g, i) => {
-      const ga = A0 + (i + 0.5) * span;
+      const span = ((A1 - A0) * weights[i]) / total;
+      const ga = cursor + span / 2;
+      cursor += span;
       const hub = at(R_HUB, ga);
       const jobs: { skill: Skill; x: number; y: number }[] = [];
       let rest = [...g.skills];
-      for (const r of ROWS) {
-        if (!rest.length) break;
-        const arcLen = rad(span * 0.86) * r;
-        const cap = Math.max(1, Math.floor(arcLen / 50));
+      for (let r = ROW0; rest.length; r += ROW_GAP) {
+        const usable = rad(span * 0.9);
+        const cap = Math.max(r > ROW0 + ROW_GAP * 3.5 ? 1 : 0, Math.floor((usable * r) / spacing));
+        if (!cap) continue;
         const row = rest.slice(0, cap);
         rest = rest.slice(cap);
-        const step = Math.min(span * 0.86 / Math.max(row.length, 1), (50 / r) * (180 / Math.PI));
-        row.forEach((skill, j) => {
-          const a = ga + (j - (row.length - 1) / 2) * step;
-          jobs.push({ skill, ...at(r, a) });
-        });
+        const step = (spacing / r) * (180 / Math.PI);
+        row.forEach((skill, j) => jobs.push({ skill, ...at(r, ga + (j - (row.length - 1) / 2) * step) }));
       }
-      return { group: g, angle: ga, hub, label: at(305, ga), jobs };
+      return { group: g, angle: ga, span, hub, label: at(R_LABEL, ga), jobs };
     });
-  }, [d]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d, W, H]);
 
   const neighbourBtn = (side: "left" | "right") => {
     const nb = side === "left" ? pd : nd;
@@ -103,7 +112,7 @@ export function DepartmentView({ id, selectedJob, onBack, onNavigate, onSelectJo
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      <button onClick={onBack} className="btn btn-glass absolute left-24 top-5 z-30">
+      <button onClick={onBack} className="btn btn-glass absolute left-24 top-[4.25rem] z-30">
         <ChevronLeft size={15} /> All Departments
       </button>
       {neighbourBtn("left")}
@@ -132,16 +141,16 @@ export function DepartmentView({ id, selectedJob, onBack, onNavigate, onSelectJo
             style={{ background: d.color, opacity: 0.12 }}
           />
 
-          <div ref={wrap} className="absolute inset-x-20 bottom-4 top-16">
+          <div ref={wrap} className="absolute inset-x-20 bottom-[140px] top-[7rem]">
             <div
               className="absolute bottom-0 left-1/2"
-              style={{ width: W, height: H, transform: `translateX(-50%) scale(${scale})`, transformOrigin: "bottom center" }}
+              style={{ width: W, height: H, transform: "translateX(-50%)", visibility: W ? "visible" : "hidden" }}
             >
               <svg width={W} height={H} className="absolute inset-0 overflow-visible">
                 {RINGS.map((r, i) => (
                   <motion.path
                     key={r}
-                    d={`M ${C.x - r} ${C.y} A ${r} ${r} 0 0 1 ${C.x + r} ${C.y}`}
+                    d={`M ${at(r, A0).x} ${at(r, A0).y} A ${r} ${r} 0 1 1 ${at(r, A1).x} ${at(r, A1).y}`}
                     fill="none"
                     style={{ stroke: "rgba(var(--star),0.08)" }}
                     strokeDasharray={i % 2 ? "2 6" : undefined}
@@ -154,7 +163,7 @@ export function DepartmentView({ id, selectedJob, onBack, onNavigate, onSelectJo
                   <g key={l.group.id}>
                     <motion.line
                       x1={C.x} y1={C.y} x2={l.hub.x} y2={l.hub.y}
-                      stroke={d.color} strokeOpacity={0.5} strokeWidth={1.2}
+                      stroke={d.color} strokeOpacity={0.55} strokeWidth={u(1.4)}
                       initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
                       transition={{ duration: 0.6, delay: 0.25 + gi * 0.08 }}
                     />
@@ -163,14 +172,14 @@ export function DepartmentView({ id, selectedJob, onBack, onNavigate, onSelectJo
                         key={j.skill.id}
                         x1={l.hub.x} y1={l.hub.y} x2={j.x} y2={j.y}
                         stroke={d.color}
-                        strokeOpacity={hover === j.skill.id || selectedJob === j.skill.id ? 0.7 : j.skill.readyToRun ? 0.35 : 0.12}
-                        strokeWidth={0.9}
+                        strokeOpacity={hover === j.skill.id || selectedJob === j.skill.id ? 0.8 : j.skill.readyToRun || j.skill.recommended ? 0.45 : 0.22}
+                        strokeWidth={u(1)}
                         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
                         transition={{ duration: 0.5, delay: 0.5 + gi * 0.08 + ji * 0.02 }}
                       />
                     ))}
                     <motion.circle
-                      cx={l.hub.x} cy={l.hub.y} r={5} fill={d.color}
+                      cx={l.hub.x} cy={l.hub.y} r={u(4)} fill={d.color}
                       initial={{ scale: 0 }} animate={{ scale: 1 }}
                       transition={{ delay: 0.5 + gi * 0.08, type: "spring" }}
                       style={{ transformBox: "fill-box", transformOrigin: "center", filter: `drop-shadow(0 0 6px ${d.color})` }}
@@ -186,63 +195,64 @@ export function DepartmentView({ id, selectedJob, onBack, onNavigate, onSelectJo
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.7 + gi * 0.08 }}
-                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-center"
-                  style={{ left: l.label.x, top: l.label.y }}
+                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-center"
+                  style={{ left: l.label.x, top: l.label.y, width: Math.max(u(120), rad(l.span) * R_LABEL * 0.95) }}
                 >
-                  <div className="dept-title rounded-md bg-bg/40 px-1.5 text-[11px] text-fg/90" style={{ letterSpacing: "0.22em" }}>{l.group.name}</div>
-                  <div className="mt-0.5 text-[11px] text-muted">({l.group.skills.length} job{l.group.skills.length === 1 ? "" : "s"})</div>
+                  <div className="dept-title leading-tight text-fg" style={{ fontSize: u(14), letterSpacing: "0.22em", textShadow: "0 0 12px var(--bg)" }}>{l.group.name}</div>
+                  <div className="dept-title mt-1 text-muted" style={{ fontSize: u(11), letterSpacing: "0.22em" }}>
+                    {l.group.skills.length} job{l.group.skills.length === 1 ? "" : "s"}
+                  </div>
                 </motion.div>
               ))}
 
-              {/* job nodes */}
+              {/* job nodes with their names */}
               {layout.flatMap((l, gi) =>
                 l.jobs.map((j, ji) => {
                   const s = j.skill;
-                  const lit = s.readyToRun || s.recommended;
+                  const rec = !!s.recommended;
+                  const lit = s.readyToRun || rec;
                   const sel = selectedJob === s.id;
+                  const size = u(rec ? 54 : 36);
                   return (
-                    <motion.button
+                    <motion.div
                       key={s.id}
                       initial={{ opacity: 0, scale: 0 }}
-                      animate={{ opacity: lit || sel || hover === s.id ? 1 : 0.5, scale: 1 }}
-                      whileHover={{ scale: 1.15 }}
+                      animate={{ opacity: lit || sel || hover === s.id ? 1 : 0.6, scale: 1 }}
                       transition={{ delay: 0.6 + gi * 0.08 + ji * 0.03, type: "spring", stiffness: 260, damping: 18 }}
-                      onMouseEnter={() => setHover(s.id)}
-                      onMouseLeave={() => setHover(null)}
-                      onClick={() => onSelectJob(s)}
-                      className="absolute -ml-[21px] -mt-[21px] flex h-[42px] w-[42px] items-center justify-center rounded-full"
-                      style={{
-                        left: j.x,
-                        top: j.y,
-                        background: lit ? `${d.color}30` : "var(--glass-strong)",
-                        border: `1px solid ${lit || sel ? d.color : "var(--line)"}`,
-                        color: lit || sel ? d.color : "var(--muted)",
-                        boxShadow: sel
-                          ? `0 0 0 4px ${d.color}33, 0 0 24px ${d.color}aa`
-                          : lit
-                            ? `0 0 0 3px ${d.color}1a, 0 0 18px ${d.color}66`
-                            : "none",
-                      }}
-                      aria-label={s.name}
+                      className="absolute flex flex-col items-center"
+                      style={{ left: j.x, top: j.y, width: u(96), marginLeft: -u(48), marginTop: -size / 2 }}
                     >
-                      <DynamicIcon name={s.icon} size={17} strokeWidth={1.7} />
-                      {s.recommended && (
-                        <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: d.color }} />
-                      )}
-                      <AnimatePresence>
-                        {hover === s.id && (
-                          <motion.span
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                            className="pointer-events-none absolute top-full z-30 mt-2 whitespace-nowrap rounded-lg glass-strong px-2.5 py-1 text-[12px] text-fg"
-                          >
-                            {s.name}
-                            {s.readyToRun && <span className="ml-1.5 text-[10px]" style={{ color: d.color }}>● ready</span>}
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
-                    </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.12 }}
+                        onMouseEnter={() => setHover(s.id)}
+                        onMouseLeave={() => setHover(null)}
+                        onClick={() => onSelectJob(s)}
+                        className="relative flex shrink-0 items-center justify-center rounded-full"
+                        style={{
+                          width: size,
+                          height: size,
+                          background: rec ? d.color : lit ? `${d.color}30` : "var(--glass-strong)",
+                          border: `${u(1)}px solid ${lit || sel ? d.color : "var(--line)"}`,
+                          color: rec ? "#0b0b10" : lit || sel ? d.color : "var(--muted)",
+                          boxShadow: rec
+                            ? `0 0 0 ${u(5)}px var(--bg), 0 0 0 ${u(6.5)}px ${d.color}, 0 0 ${u(34)}px ${d.color}`
+                            : sel
+                              ? `0 0 0 ${u(4)}px ${d.color}33, 0 0 ${u(24)}px ${d.color}aa`
+                              : lit
+                                ? `0 0 0 ${u(3)}px ${d.color}1a, 0 0 ${u(16)}px ${d.color}66`
+                                : "none",
+                        }}
+                        aria-label={s.name}
+                      >
+                        <DynamicIcon name={s.icon} size={u(rec ? 22 : 15)} strokeWidth={rec ? 2 : 1.7} />
+                      </motion.button>
+                      <span
+                        className="mt-1.5 line-clamp-2 text-center leading-tight"
+                        style={{ fontSize: u(11.5), color: rec || hover === s.id || sel ? "var(--fg)" : lit ? "var(--fg)" : "var(--muted)", fontWeight: rec ? 600 : 400, textShadow: "0 0 8px var(--bg)" }}
+                      >
+                        {s.name}
+                      </span>
+                    </motion.div>
                   );
                 }),
               )}
@@ -256,17 +266,17 @@ export function DepartmentView({ id, selectedJob, onBack, onNavigate, onSelectJo
                 style={{ left: C.x, top: C.y }}
               >
                 <div
-                  className="flex h-[92px] w-[92px] items-center justify-center rounded-full"
-                  style={{ background: `${d.color}24`, boxShadow: `0 0 0 1px ${d.color}aa, 0 0 0 10px ${d.color}12, 0 0 60px ${d.color}77` }}
+                  className="flex items-center justify-center rounded-full"
+                  style={{ width: u(84), height: u(84), background: `${d.color}24`, boxShadow: `0 0 0 ${u(1)}px ${d.color}aa, 0 0 0 ${u(10)}px ${d.color}12, 0 0 ${u(60)}px ${d.color}77` }}
                 >
                   <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}>
-                    <PixelAvatar id={d.id} color={d.color} size={44} />
+                    <PixelAvatar id={d.id} color={d.color} size={u(40)} />
                   </motion.div>
                 </div>
               </motion.div>
-              <div className="absolute w-[500px] -translate-x-1/2 text-center" style={{ left: C.x, top: C.y + 62 }}>
-                <div className="dept-title text-[22px]">{d.name}</div>
-                <div className="mt-1 text-[13px] text-muted">
+              <div className="absolute -translate-x-1/2 whitespace-nowrap text-center" style={{ left: C.x, top: C.y + u(54) }}>
+                <div className="dept-title" style={{ fontSize: u(20) }}>{d.name}</div>
+                <div className="mt-1 text-muted" style={{ fontSize: u(13) }}>
                   {d.tagline.join(" · ")} · <span style={{ color: d.color }}>{d.readyToRun} of {d.jobs} ready to run</span>
                 </div>
               </div>

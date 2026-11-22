@@ -7,6 +7,7 @@
 import { useSyncExternalStore } from "react";
 import type { FileItem, Skill, Thread } from "./types";
 import { threads as seedThreads } from "@/data/threads";
+import { siteConfig } from "@/config/site";
 
 export interface AppState {
   threads: Thread[];
@@ -16,7 +17,11 @@ export interface AppState {
   trialStarted: boolean;
   integrations: Record<string, boolean>;
   schedules: Record<string, boolean>;
+  workspace: { company: string; about: string };
+  notifications: Notice[];
 }
+
+export type Notice = { id: string; title: string; body: string; time: string; color: string };
 
 const KEY = "nexora.state.v1";
 
@@ -28,6 +33,15 @@ const initial: AppState = {
   trialStarted: false,
   integrations: {},
   schedules: {},
+  notifications: [
+    { id: "n1", title: "Paid Ads needs you", body: "Cost per lead rose 7.7% this week.", time: "5 min ago", color: "#b98bff" },
+    { id: "n2", title: "Q3 preview drafted", body: "Research finished the Volvo Cars preview.", time: "1 h ago", color: "#7cc4ff" },
+    { id: "n3", title: "Invoice overdue", body: "Finance flagged 2 unpaid commissioned-research invoices.", time: "Yesterday", color: "#5fe08a" },
+  ],
+  workspace: {
+    company: siteConfig.user.company,
+    about: "Independent equity research on Nordic listed companies: commissioned research, investor events and distribution to institutional investors.",
+  },
 };
 
 let state: AppState = initial;
@@ -75,3 +89,14 @@ export function useStore<T>(selector: (s: AppState) => T): T {
 }
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
+
+/** Context every agent request carries: workspace settings and Company Brain documents. */
+export function agentContext() {
+  const s = getState();
+  return {
+    company: s.workspace.company,
+    about: s.workspace.about,
+    docCount: s.files.length,
+    docs: s.files.map((f) => ({ name: f.name, text: f.text })),
+  };
+}

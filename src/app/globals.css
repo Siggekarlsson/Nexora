@@ -10,7 +10,7 @@
   --faint: #9c99a8;
   --line: rgba(20, 18, 30, 0.1);
   --glass: rgba(255, 255, 255, 0.6);
-  --glass-strong: rgba(255, 255, 255, 0.85);
+  --glass-strong: rgba(255, 255, 255, 0.97);
   --hover: rgba(20, 18, 30, 0.06);
   --active: rgba(20, 18, 30, 0.09);
   --star: 20, 18, 30;
@@ -26,7 +26,7 @@
   --faint: #5c5a68;
   --line: rgba(255, 255, 255, 0.09);
   --glass: rgba(28, 28, 36, 0.55);
-  --glass-strong: rgba(24, 24, 31, 0.9);
+  --glass-strong: rgba(20, 20, 26, 0.97);
   --hover: rgba(255, 255, 255, 0.06);
   --active: rgba(255, 255, 255, 0.1);
   --star: 255, 255, 255;
@@ -93,6 +93,7 @@ body {
     font-weight: 500;
   }
   .icon-btn {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -163,3 +164,26 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .hud-spin, .hud-spin-rev, .twinkle { animation: none; }
 }
+
+/* Agent replies rendered by react-markdown */
+.md > :first-child { margin-top: 0; }
+.md p { margin: 0.45rem 0; }
+.md strong { font-weight: 600; color: var(--fg); }
+.md em { font-style: italic; }
+.md h1, .md h2, .md h3, .md h4 { margin: 0.9rem 0 0.35rem; font-weight: 600; color: var(--fg); }
+.md h1 { font-size: 1.15rem; }
+.md h2 { font-size: 1.05rem; }
+.md h3, .md h4 { font-size: 0.95rem; }
+.md ul, .md ol { margin: 0.45rem 0; padding-left: 1.25rem; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md li { margin: 0.2rem 0; }
+.md li::marker { color: var(--faint); }
+.md code { font-family: ui-monospace, monospace; font-size: 0.85em; padding: 0.1rem 0.3rem; border-radius: 0.3rem; background: var(--hover); }
+.md pre { margin: 0.6rem 0; padding: 0.75rem; border-radius: 0.6rem; background: var(--hover); overflow-x: auto; }
+.md pre code { padding: 0; background: none; }
+.md blockquote { margin: 0.6rem 0; padding-left: 0.8rem; border-left: 2px solid var(--line); color: var(--muted); }
+.md table { margin: 0.6rem 0; border-collapse: collapse; font-size: 0.9em; }
+.md th, .md td { border: 1px solid var(--line); padding: 0.3rem 0.6rem; text-align: left; }
+.md th { font-weight: 600; }
+.md hr { margin: 0.8rem 0; border-color: var(--line); }

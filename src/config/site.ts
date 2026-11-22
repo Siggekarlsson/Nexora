@@ -12,7 +12,7 @@ export const siteConfig = {
     firstName: "Sigge",
     lastName: "Karlsson",
     email: "sigge@example.com",
-    company: "Nordic Equity Research",
+    company: "Valeur",
   },
   trial: {
     started: false,

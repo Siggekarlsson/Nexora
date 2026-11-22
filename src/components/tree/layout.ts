@@ -37,11 +37,11 @@ function rng(seed: number) {
   };
 }
 
-const R_DEPT = 165;
-const R_GROUP = 245;
-const R_JOB_MIN = 285;
-const R_JOB_MAX = 385;
-const R_LABEL = 432;
+const R_DEPT = 150;
+const R_GROUP = 215;
+const R_JOB_MIN = 248;
+const R_JOB_MAX = 330;
+const R_LABEL = 372;
 
 export function radialLayout(departments: Department[]): TreeLayout {
   const nodes: TreeNode[] = [{ id: "brain", kind: "brain", deptId: "brain", x: 0, y: 0, order: 0 }];
@@ -51,7 +51,7 @@ export function radialLayout(departments: Department[]): TreeLayout {
 
   radialOrder.forEach((deptId, i) => {
     const d = departments.find((x) => x.id === deptId)!;
-    const a = -Math.PI / 2 + i * sector;
+    const a = Math.PI / 2 + i * sector;
     const dx = Math.cos(a) * R_DEPT;
     const dy = Math.sin(a) * R_DEPT;
     nodes.push({ id: d.id, kind: "dept", deptId: d.id, parent: "brain", x: dx, y: dy, order: 0.1 + i * 0.04 });
@@ -87,14 +87,14 @@ export function radialLayout(departments: Department[]): TreeLayout {
     const lx = Math.cos(a) * R_LABEL * 1.12;
     const ly = Math.sin(a) * R_LABEL;
     const c = Math.cos(a);
-    labels.push({ deptId: d.id, x: lx, y: ly + (Math.sin(a) > 0.5 ? 14 : 0), anchor: Math.abs(c) < 0.3 ? "middle" : c > 0 ? "start" : "end" });
+    labels.push({ deptId: d.id, x: lx, y: ly + (Math.sin(a) > 0.5 ? 18 : Math.sin(a) < -0.5 ? -10 : 0), anchor: Math.abs(c) < 0.3 ? "middle" : c > 0 ? "start" : "end" });
   });
 
   return { nodes, labels, groupLabels: [] };
 }
 
 export function lineLayout(departments: Department[]): TreeLayout {
-  const nodes: TreeNode[] = [{ id: "brain", kind: "brain", deptId: "brain", x: -590, y: 0, order: 0 }];
+  const nodes: TreeNode[] = [{ id: "brain", kind: "brain", deptId: "brain", x: -540, y: 0, order: 0 }];
   const labels: TreeLabel[] = [];
   const groupLabels: TreeLayout["groupLabels"] = [];
   const rows = departments.reduce((s, d) => s + d.subGroups.length, 0);
@@ -111,14 +111,15 @@ export function lineLayout(departments: Department[]): TreeLayout {
       groupYs.push(gy);
       nodes.push({ id: g.id, kind: "group", deptId: d.id, parent: d.id, x: -190, y: gy, order: 0.4 });
       g.skills.forEach((s, j) => {
-        nodes.push({ id: s.id, kind: "job", deptId: d.id, parent: g.id, x: -140 + j * 17, y: gy, order: 0.5 + j * 0.02 });
+        nodes.push({ id: s.id, kind: "job", deptId: d.id, parent: g.id, x: -150 + j * 13, y: gy, order: 0.5 + j * 0.02 });
       });
-      groupLabels.push({ id: g.id, x: -140 + g.skills.length * 17 + 6, y: gy, name: g.name });
+      // all group names start in one column, right of the longest row of jobs
+      groupLabels.push({ id: g.id, x: 50, y: gy, name: g.name });
       y += rowH;
     });
     const dy = (top + y) / 2;
-    nodes.push({ id: d.id, kind: "dept", deptId: d.id, parent: "brain", x: -400, y: dy, order: 0.1 + i * 0.04 });
-    labels.push({ deptId: d.id, x: 250, y: dy, anchor: "start" });
+    nodes.push({ id: d.id, kind: "dept", deptId: d.id, parent: "brain", x: -380, y: dy, order: 0.1 + i * 0.04 });
+    labels.push({ deptId: d.id, x: 330, y: dy, anchor: "start" });
     y += gap;
   });
 

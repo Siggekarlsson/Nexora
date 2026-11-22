@@ -75,6 +75,8 @@ export interface FileItem {
   sizeBytes: number;
   uploadedAt: string;
   departmentId?: DepartmentId;
+  /** Extracted text for plain-text formats, sent to agents as Company Brain context. */
+  text?: string;
 }
 
 export interface Dashboard {

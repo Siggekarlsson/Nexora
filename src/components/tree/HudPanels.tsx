@@ -59,7 +59,7 @@ export function HudPanels({ visible }: { visible: boolean }) {
             key="sys"
             initial={{ opacity: 0, x: -16 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -16 }}
+            exit={{ opacity: 0, x: -16, transition: { delay: 0, duration: 0.25 } }}
             transition={{ delay: 1.4, duration: 0.6 }}
             className="pointer-events-none absolute left-6 top-1/2 z-10 hidden w-52 -translate-y-1/2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted xl:block"
           >
@@ -85,7 +85,7 @@ export function HudPanels({ visible }: { visible: boolean }) {
             key="log"
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 16 }}
+            exit={{ opacity: 0, x: 16, transition: { delay: 0, duration: 0.25 } }}
             transition={{ delay: 1.6, duration: 0.6 }}
             className="pointer-events-none absolute right-6 top-1/2 z-10 hidden w-60 -translate-y-1/2 font-mono text-[10px] tracking-[0.06em] text-muted xl:block"
           >

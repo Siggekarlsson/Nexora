@@ -3,12 +3,14 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Blocks, CalendarClock, Folder, LayoutDashboard, MessageCircle, Network, Search, Settings, Wand2, Plus } from "lucide-react";
+import { Blocks, CalendarClock, Folder, LayoutDashboard, MessageCircle, MessageSquare, Network, Search, Settings, Wand2, Plus, Zap } from "lucide-react";
+import { allSkills } from "@/data/tree";
+import { useStore } from "@/lib/store";
 import { useUI } from "./Providers";
 import { departmentSeeds } from "@/data/departments";
 import { PixelAvatar } from "@/components/brand/PixelAvatar";
 
-type Item = { id: string; label: string; group: string; href: string; icon: React.ReactNode };
+type Item = { id: string; label: string; group: string; href: string; icon: React.ReactNode; hint?: string; searchOnly?: boolean };
 
 export function CommandPalette() {
   const { paletteOpen, setPaletteOpen } = useUI();
@@ -17,6 +19,8 @@ export function CommandPalette() {
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const threads = useStore((s) => s.threads);
+  const customSkills = useStore((s) => s.customSkills);
   const items: Item[] = useMemo(
     () => [
       { id: "tree", label: "Skill Tree", group: "Go to", href: "/", icon: <Network size={15} /> },
@@ -34,18 +38,44 @@ export function CommandPalette() {
         group: "Departments",
         href: `/?dept=${d.id}`,
         icon: <PixelAvatar id={d.avatar} color={d.color} size={15} />,
+        hint: d.tagline.join(", "),
+      })),
+      ...[...allSkills, ...customSkills].map((sk) => ({
+        id: `skill-${sk.id}`,
+        label: sk.name,
+        group: "Skills",
+        href: `/chat?skill=${sk.id}`,
+        icon: <Zap size={15} />,
+        hint: departmentSeeds.find((d) => d.id === sk.departmentId)?.name,
+        searchOnly: true,
+      })),
+      ...threads.map((t) => ({
+        id: `thread-${t.id}`,
+        label: t.title,
+        group: "Threads",
+        href: `/chat?thread=${t.id}`,
+        icon: <MessageSquare size={15} />,
+        hint: departmentSeeds.find((d) => d.id === t.departmentId)?.name ?? "Company Brain",
+        searchOnly: true,
       })),
     ],
-    [],
+    [threads, customSkills],
   );
 
-  const filtered = items.filter((i) => i.label.toLowerCase().includes(q.toLowerCase()));
+  const needle = q.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!needle) return items.filter((i) => !i.searchOnly);
+    const hits = items.filter((i) => i.label.toLowerCase().includes(needle) || i.hint?.toLowerCase().includes(needle));
+    // Keep the list short: at most 8 hits per group.
+    const per: Record<string, number> = {};
+    return hits.filter((i) => (per[i.group] = (per[i.group] ?? 0) + 1) <= 8);
+  }, [items, needle]);
 
   useEffect(() => {
     if (paletteOpen) {
       setQ("");
       setIdx(0);
-      setTimeout(() => inputRef.current?.focus(), 10);
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [paletteOpen]);
 
@@ -79,6 +109,7 @@ export function CommandPalette() {
               <Search size={16} className="text-muted" />
               <input
                 ref={inputRef}
+                autoFocus
                 value={q}
                 onChange={(e) => {
                   setQ(e.target.value);
@@ -109,7 +140,8 @@ export function CommandPalette() {
                       className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm ${i === idx ? "bg-active text-fg" : "text-muted"}`}
                     >
                       <span className="flex w-4 justify-center">{item.icon}</span>
-                      {item.label}
+                      <span className="truncate">{item.label}</span>
+                      {item.hint && <span className="ml-auto shrink-0 truncate pl-3 text-xs text-faint">{item.hint}</span>}
                     </button>
                   </div>
                 );

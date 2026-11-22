@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { integrationContext } from "@/lib/integrations/context";
 import { writeConn } from "@/lib/integrations/vault";
@@ -15,7 +16,15 @@ import { mockReply } from "@/lib/mockReply";
  */
 
 type Msg = { role: "user" | "assistant"; content: string };
-type Body = { agent: DepartmentId; skillName?: string; docCount?: number; messages: Msg[] };
+type Body = {
+  agent: DepartmentId;
+  skillName?: string;
+  docCount?: number;
+  company?: string;
+  about?: string;
+  docs?: { name: string; text?: string }[];
+  messages: Msg[];
+};
 
 const GROQ_URL = "https://api.groq.com/openai/v1";
 const GROQ_DEFAULT = "llama-3.3-70b-versatile";
@@ -52,8 +61,10 @@ export async function POST(req: NextRequest) {
     const p = provider();
     if (p !== "mock") {
       const { context, gmail } = await integrationContext(req, last);
-      const system = systemPrompt(body.agent, body.skillName) + context;
-      const content = p === "anthropic" ? await anthropic(system, messages) : await groq(system, messages);
+      const system =
+        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic" }) + context;
+      const raw = p === "anthropic" ? await anthropic(system, messages) : await groq(system, messages);
+      const content = stripEcho(raw, last);
       const res = NextResponse.json({ content, provider: p });
       if (gmail) writeConn(res, "gmail", gmail);
       return res;
@@ -68,14 +79,39 @@ export async function POST(req: NextRequest) {
 }
 
 async function anthropic(system: string, messages: Msg[]) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": clean(process.env.ANTHROPIC_API_KEY)!, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5", max_tokens: 1024, system, messages }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ProviderError(`Anthropic API ${res.status}${data?.error?.message ? ` (${data.error.message})` : ""}`);
-  return (data.content as { type: string; text?: string }[]).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+  const client = new Anthropic({ apiKey: clean(process.env.ANTHROPIC_API_KEY) });
+  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5";
+  const convo: Anthropic.MessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
+  let response: Anthropic.Message | undefined;
+  const blocks: Anthropic.ContentBlock[] = [];
+  try {
+    // Web search runs on Anthropic's servers; a long search turn can pause, so resume it a few times.
+    for (let i = 0; i < 4; i++) {
+      response = await client.messages.create({
+        model,
+        max_tokens: 4096,
+        system,
+        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }],
+        messages: convo,
+      });
+      blocks.push(...response.content);
+      if (response.stop_reason !== "pause_turn") break;
+      convo.push({ role: "assistant", content: response.content });
+    }
+  } catch (e) {
+    if (e instanceof Anthropic.APIError) throw new ProviderError(`Anthropic API ${e.status ?? ""} (${e.message})`);
+    throw e;
+  }
+  const text: string[] = [];
+  const sources = new Map<string, string>();
+  for (const block of blocks) {
+    if (block.type !== "text") continue;
+    text.push(block.text);
+    for (const c of (block.citations ?? []) as { url?: string; title?: string | null }[]) if (c.url) sources.set(c.url, c.title || c.url);
+  }
+  let out = text.join("").trim();
+  if (sources.size) out += "\n\n**Sources**\n" + [...sources].map(([url, title]) => `- [${title}](${url})`).join("\n");
+  return out;
 }
 
 async function groq(system: string, messages: Msg[]) {
@@ -111,4 +147,17 @@ async function groqFallbackModel(key: string) {
   const { data } = (await res.json()) as { data: { id: string; active?: boolean }[] };
   const ids = data.filter((m) => m.active !== false).map((m) => m.id).filter((id) => !/whisper|tts|guard|embed|vision/i.test(id));
   return ids.find((id) => /llama.*70b/i.test(id)) ?? ids.find((id) => /llama|gpt-oss|qwen/i.test(id)) ?? ids[0] ?? null;
+}
+
+const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+/** Drops a first line that just repeats the user's question (e.g. "## Which companies do we cover?"). */
+function stripEcho(content: string, question: string) {
+  const [first, ...rest] = content.trimStart().split("\n");
+  const line = norm(first.replace(/^#+\s*|^\*\*|\*\*$/g, ""));
+  const q = norm(question);
+  if (line && q && (line === q || (line.length > 8 && q.includes(line)) || (q.length > 8 && line.includes(q) && line.length < q.length + 12))) {
+    return rest.join("\n").trimStart();
+  }
+  return content;
 }

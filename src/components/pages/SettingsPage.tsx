@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { siteConfig } from "@/config/site";
 import { Toggle } from "@/components/ui/Toggle";
@@ -14,7 +14,11 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const { theme, setTheme } = useTheme();
   const [notif, setNotif] = useState({ needsYou: true, digest: true, runs: false, product: false });
+  const workspace = useStore((s) => s.workspace);
+  const [ws, setWs] = useState(workspace);
+  useEffect(() => setWs(workspace), [workspace]);
   const save = () => {
+    if (active === "Workspace") setState(() => ({ workspace: { company: ws.company.trim() || siteConfig.user.company, about: ws.about } }));
     setSaved(true);
     setTimeout(() => setSaved(false), 1600);
   };
@@ -39,8 +43,8 @@ export function SettingsPage() {
         )}
         {active === "Workspace" && (
           <div className="mt-5 grid gap-4">
-            <label className="text-[13px] text-muted">Company name<input defaultValue={siteConfig.user.company} className={field} /></label>
-            <label className="text-[13px] text-muted">What does your company do?<textarea rows={3} defaultValue="Independent equity research on Nordic listed companies: commissioned research, investor events and distribution to institutional investors." className={field + " resize-none"} /></label>
+            <label className="text-[13px] text-muted">Company name<input value={ws.company} onChange={(e) => setWs({ ...ws, company: e.target.value })} className={field} /></label>
+            <label className="text-[13px] text-muted">What does your company do?<textarea rows={3} value={ws.about} onChange={(e) => setWs({ ...ws, about: e.target.value })} className={field + " resize-none"} /></label>
             <label className="text-[13px] text-muted">Default language<select className={field} defaultValue="en"><option value="en">English</option><option value="sv">Svenska</option></select></label>
           </div>
         )}
