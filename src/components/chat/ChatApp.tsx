@@ -36,8 +36,8 @@ async function askAgent(thread: Thread): Promise<string> {
       messages: thread.messages.map((m) => ({ role: m.role, content: m.content })),
     }),
   });
-  const data = await res.json();
-  return data.content as string;
+  const data = await res.json().catch(() => null);
+  return (data?.content as string) || `The agent couldn't answer (server error ${res.status}).`;
 }
 
 function updateThread(id: string, fn: (t: Thread) => Thread) {
