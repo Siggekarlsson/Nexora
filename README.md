@@ -35,6 +35,8 @@ Shopify har ingen delad app hos Composio. Antingen använder du Nexoras egen Sho
 3. I **Vercel → Project → Settings → Environment Variables**: lägg in `COMPOSIO_API_KEY` och `APP_URL=https://<din-sida>`. Gör sedan en **Redeploy**.
 4. Klicka **Connect** på Gmail eller Google Drive i Nexora och logga in.
 
+Samma nyckel kopplar även HubSpot, Meta Ads, Slack, LinkedIn, Outlook, QuickBooks (kortet "Accounting export") och Mailchimp (kortet "Newsletter"). I chatten får agenterna Composios verktyg (`COMPOSIO_SEARCH_TOOLS` och `COMPOSIO_MULTI_EXECUTE_TOOL`) och kan läsa data från de appar som är kopplade. De kan inte skicka, posta, ändra eller radera något, eftersom sessionen stänger av verktyg märkta create, update och destructive. Om Composio saknar en färdig app för någon tjänst hoppas den över och kortet visar Coming soon.
+
 Varje webbläsare får ett slumpat användar-id i en httpOnly-cookie (`nx_uid`), och Composio håller den användarens kopplingar. När `COMPOSIO_API_KEY` finns används Composio; annars används de egna OAuth-apparna nedan.
 
 When a chat message is about email, files/documents/reports or orders/products, the chat API reads the connected account (latest inbox messages, latest Drive files with the text of Google Docs and txt/md/csv files up to ~20,000 characters, or recent Shopify orders and products) and passes it to the AI as data, never as instructions.

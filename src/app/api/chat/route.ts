@@ -5,6 +5,7 @@ import { writeConn } from "@/lib/integrations/vault";
 import type { DepartmentId } from "@/lib/types";
 import { systemPrompt } from "@/lib/agents";
 import { mockReply } from "@/lib/mockReply";
+import { agentTools, composioConfigured, describe, readUid, type FnTool } from "@/lib/integrations/composio";
 
 /**
  * Chat endpoint. Provider order:
@@ -16,6 +17,7 @@ import { mockReply } from "@/lib/mockReply";
  */
 
 type Msg = { role: "user" | "assistant"; content: string };
+type Agent = { tools: FnTool[]; run: (name: string, args: Record<string, unknown>) => Promise<string> } | null;
 type Body = {
   agent: DepartmentId;
   skillName?: string;
@@ -61,9 +63,19 @@ export async function POST(req: NextRequest) {
     const p = provider();
     if (p !== "mock") {
       const { context, gmail, drive } = await integrationContext(req, last);
+      const uid = readUid(req);
+      const agent =
+        composioConfigured() && uid
+          ? await agentTools(uid).catch((e) => {
+              console.error("[composio] agent tools failed:", describe(e));
+              return null;
+            })
+          : null;
       const system =
-        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic" }) + context;
-      const raw = p === "anthropic" ? await anthropic(system, messages) : await groq(system, messages);
+        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic" }) +
+        context +
+        (agent?.prompt ?? "");
+      const raw = p === "anthropic" ? await anthropic(system, messages, agent) : await groq(system, messages, agent);
       const content = stripEcho(raw, last);
       const res = NextResponse.json({ content, provider: p });
       if (gmail) writeConn(res, "gmail", gmail);
@@ -79,25 +91,50 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function anthropic(system: string, messages: Msg[]) {
+const parseArgs = (raw: unknown): Record<string, unknown> => {
+  if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+  try {
+    const v = JSON.parse(String(raw || "{}"));
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+};
+
+async function anthropic(system: string, messages: Msg[], agent: Agent) {
   const client = new Anthropic({ apiKey: clean(process.env.ANTHROPIC_API_KEY) });
   const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5";
   const convo: Anthropic.MessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
   let response: Anthropic.Message | undefined;
   const blocks: Anthropic.ContentBlock[] = [];
+  const tools: Anthropic.ToolUnion[] = [
+    { type: "web_search_20260209", name: "web_search", max_uses: 5 },
+    ...(agent?.tools ?? []).map((t) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: (t.function.parameters ?? { type: "object", properties: {} }) as Anthropic.Tool.InputSchema,
+    })),
+  ];
   try {
-    // Web search runs on Anthropic's servers; a long search turn can pause, so resume it a few times.
-    for (let i = 0; i < 4; i++) {
-      response = await client.messages.create({
-        model,
-        max_tokens: 4096,
-        system,
-        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }],
-        messages: convo,
-      });
+    // Web search runs on Anthropic's servers and can pause; app tools run here. Loop a few rounds.
+    for (let i = 0; i < 8; i++) {
+      response = await client.messages.create({ model, max_tokens: 4096, system, tools, messages: convo });
+      if (response.stop_reason === "pause_turn") {
+        blocks.push(...response.content);
+        convo.push({ role: "assistant", content: response.content });
+        continue;
+      }
+      if (response.stop_reason === "tool_use" && agent) {
+        convo.push({ role: "assistant", content: response.content });
+        const results: Anthropic.ToolResultBlockParam[] = [];
+        for (const b of response.content) {
+          if (b.type === "tool_use") results.push({ type: "tool_result", tool_use_id: b.id, content: await agent.run(b.name, parseArgs(b.input)) });
+        }
+        convo.push({ role: "user", content: results });
+        continue;
+      }
       blocks.push(...response.content);
-      if (response.stop_reason !== "pause_turn") break;
-      convo.push({ role: "assistant", content: response.content });
+      break;
     }
   } catch (e) {
     if (e instanceof Anthropic.APIError) throw new ProviderError(`Anthropic API ${e.status ?? ""} (${e.message})`);
@@ -115,22 +152,38 @@ async function anthropic(system: string, messages: Msg[]) {
   return out;
 }
 
-async function groq(system: string, messages: Msg[]) {
+type GroqMsg = Record<string, unknown>;
+
+async function groq(system: string, messages: Msg[], agent: Agent) {
   const key = clean(process.env.GROQ_API_KEY)!;
-  const call = (model: string) =>
+  let model = process.env.GROQ_MODEL ?? GROQ_DEFAULT;
+  const convo: GroqMsg[] = [{ role: "system", content: system }, ...messages];
+  for (let i = 0; i < 6; i++) {
+    const msg = await groqCall(key, model, convo, agent?.tools, (m) => (model = m));
+    const calls = (msg.tool_calls ?? []) as { id: string; function: { name: string; arguments: string } }[];
+    if (!calls.length || !agent) return (msg.content as string) ?? "";
+    convo.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });
+    for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: await agent.run(c.function.name, parseArgs(c.function.arguments)) });
+  }
+  return "I looked through your connected apps but could not finish the answer. Try a narrower question.";
+}
+
+async function groqCall(key: string, model: string, convo: GroqMsg[], tools: FnTool[] | undefined, setModel: (m: string) => void) {
+  const call = (m: string) =>
     fetch(`${GROQ_URL}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, max_tokens: 1024, messages: [{ role: "system", content: system }, ...messages] }),
+      body: JSON.stringify({ model: m, max_tokens: 1024, messages: convo, ...(tools?.length ? { tools, tool_choice: "auto" } : {}) }),
     });
 
-  let res = await call(process.env.GROQ_MODEL ?? GROQ_DEFAULT);
+  let res = await call(model);
   let data = await res.json().catch(() => ({}));
 
   // If the model was retired or renamed, pick another available chat model and retry once.
   if (!res.ok && (res.status === 404 || res.status === 400) && /model/i.test(JSON.stringify(data))) {
     const fallback = await groqFallbackModel(key);
     if (fallback) {
+      setModel(fallback);
       res = await call(fallback);
       data = await res.json().catch(() => ({}));
     }
@@ -139,7 +192,7 @@ async function groq(system: string, messages: Msg[]) {
     const hint = res.status === 401 ? " – check that GROQ_API_KEY in Vercel is correct and redeploy" : "";
     throw new ProviderError(`Groq API ${res.status}${data?.error?.message ? ` (${data.error.message})` : ""}${hint}`);
   }
-  return (data.choices?.[0]?.message?.content as string) ?? "";
+  return (data.choices?.[0]?.message ?? {}) as GroqMsg;
 }
 
 async function groqFallbackModel(key: string) {

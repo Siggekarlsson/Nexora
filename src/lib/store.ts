@@ -26,7 +26,7 @@ export type Notice = { id: string; title: string; body: string; time: string; co
 const KEY = "nexora.state.v1";
 
 /** Integrations that connect for real. Everything else is "Coming soon" and can never be connected. */
-export const LIVE_INTEGRATIONS = ["gmail", "drive", "shopify"] as const;
+export const LIVE_INTEGRATIONS = ["gmail", "drive", "shopify", "hubspot", "meta-ads", "slack", "linkedin", "outlook", "accounting", "newsletter"] as const;
 
 /** Drops old simulated connections (e.g. hubspot: true) saved by earlier versions. */
 function onlyLive(integrations: Record<string, boolean> = {}) {

@@ -20,10 +20,11 @@ const apps: { id: string; name: string; desc: string; mono: string; color: strin
   { id: "newsletter", name: "Newsletter", desc: "Send research and track opens and reads.", mono: "Nl", color: "#ff9f4a", dept: "marketing", category: "Email" },
 ];
 
-type LiveId = "gmail" | "drive" | "shopify";
+type LiveId = string;
 type Live = { configured: boolean; connected: boolean; account: string | null; via?: "composio" | "oauth" };
-type Status = Record<LiveId, Live>;
-const LIVE = new Set<string>(LIVE_INTEGRATIONS);
+type Status = Record<string, Live | undefined>;
+/** Apps with their own setup steps when Composio cannot connect them. */
+const CORE = new Set(["gmail", "drive", "shopify"]);
 
 const messages: Record<string, string> = {
   "connected=gmail": "Gmail is connected. Ask an agent about your inbox in Chat.",
@@ -57,33 +58,37 @@ export function IntegrationsPage() {
       .then((st: Status) => {
         setLive(st);
         // only real connections are stored; old simulated ones are dropped
-        setState(() => ({ integrations: { gmail: st.gmail.connected, drive: st.drive.connected, shopify: st.shopify.connected } }));
+        setState(() => ({ integrations: Object.fromEntries(LIVE_INTEGRATIONS.map((id) => [id, !!st[id]?.connected])) }));
       })
       .catch(() => {});
 
   useEffect(() => {
     load();
     const query = window.location.search.slice(1);
-    if (messages[query]) {
-      setNotice({ text: messages[query], ok: query.startsWith("connected") });
+    const name = apps.find((a) => a.id === query.split("=")[1])?.name;
+    const text =
+      messages[query] ??
+      (name && query.startsWith("connected=") ? `${name} is connected. Ask an agent about it in Chat.` : name && query.startsWith("error=") ? `${name} could not be connected. Try again.` : undefined);
+    if (text) {
+      setNotice({ text, ok: query.startsWith("connected") });
       window.history.replaceState(null, "", "/integrations");
     }
   }, []);
 
   const toggleLive = async (id: LiveId) => {
-    if (live?.[id].connected) {
+    if (live?.[id]?.connected) {
       setBusy(id);
       await fetch("/api/integrations/disconnect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
       await load();
       return setBusy(null);
     }
-    if (id === "shopify" && live?.shopify.via !== "composio") return setShopInput("");
+    if (id === "shopify" && live?.shopify?.via !== "composio") return setShopInput("");
     setBusy(id);
     window.location.href = `/api/integrations/${id}/connect`;
   };
 
   const list = apps.filter((a) => a.name.toLowerCase().includes(q.toLowerCase()));
-  const count = live ? LIVE_INTEGRATIONS.filter((id) => live[id].connected).length : 0;
+  const count = live ? LIVE_INTEGRATIONS.filter((id) => live[id]?.connected).length : 0;
   return (
     <div className="mx-auto max-w-6xl px-8 pb-24 pt-10">
       <h1 className="text-3xl font-semibold tracking-tight">Integrations</h1>
@@ -99,8 +104,9 @@ export function IntegrationsPage() {
       </label>
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {list.map((a, i) => {
-          const isLive = LIVE.has(a.id);
-          const st = isLive ? live?.[a.id as LiveId] : undefined;
+          const st = live?.[a.id];
+          // Gmail, Drive and Shopify can also use their own keys; the rest are live when Composio can connect them.
+          const isLive = CORE.has(a.id) || !!st?.configured;
           const on = !!st?.connected;
           const needsSetup = isLive && !!live && !st?.configured;
           return (
