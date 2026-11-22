@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { composioConfigured, composioConnect } from "@/lib/integrations/composio";
+import { composioConnect, viaComposio } from "@/lib/integrations/composio";
 import { normaliseShop, SHOPIFY_SCOPES, shopifyConfigured } from "@/lib/integrations/shopify";
 import { newState, origin } from "@/lib/integrations/vault";
 
 export async function GET(req: NextRequest) {
-  if (composioConfigured()) return composioConnect(req, "shopify", origin(req));
+  if (viaComposio("shopify")) return composioConnect(req, "shopify", origin(req));
   if (!shopifyConfigured()) return NextResponse.redirect(`${origin(req)}/integrations?error=shopify_not_configured`);
   const shop = normaliseShop(req.nextUrl.searchParams.get("shop") ?? "");
   if (!shop) return NextResponse.redirect(`${origin(req)}/integrations?error=shopify_shop`);

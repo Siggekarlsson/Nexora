@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { composioConfigured, composioConnect } from "@/lib/integrations/composio";
+import { composioConnect, viaComposio } from "@/lib/integrations/composio";
 import { DRIVE_SCOPES, driveConfigured } from "@/lib/integrations/drive";
 import { newState, origin } from "@/lib/integrations/vault";
 
 export async function GET(req: NextRequest) {
-  if (composioConfigured()) return composioConnect(req, "drive", origin(req));
+  if (viaComposio("drive")) return composioConnect(req, "drive", origin(req));
   if (!driveConfigured()) return NextResponse.redirect(`${origin(req)}/integrations?error=drive_not_configured`);
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   const res = NextResponse.redirect(url);
