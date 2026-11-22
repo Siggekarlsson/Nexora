@@ -38,7 +38,22 @@ export function ensureUid(req: NextRequest, res: NextResponse) {
   return uid;
 }
 
-const session = (uid: string) => composio().create(uid, { toolkits: Object.values(TOOLKIT) });
+/** Reuses this user's Composio session while the server instance lives, instead of creating one per request. */
+const sessions = new Map<string, string>();
+async function session(uid: string) {
+  const id = sessions.get(uid);
+  if (id) {
+    try {
+      return await composio().use(id);
+    } catch {
+      sessions.delete(uid);
+    }
+  }
+  const s = await composio().create(uid, { toolkits: Object.values(TOOLKIT) });
+  if (sessions.size > 5000) sessions.clear();
+  sessions.set(uid, s.sessionId);
+  return s;
+}
 
 /** Starts a sign-in and returns the URL to send the browser to. */
 export async function connectUrl(uid: string, app: AppId, callbackUrl: string) {
