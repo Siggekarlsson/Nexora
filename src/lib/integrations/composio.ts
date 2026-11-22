@@ -85,7 +85,11 @@ export async function disconnect(uid: string, app: AppId) {
 /** Runs one Composio tool as this user and returns its data, or throws with the reason. */
 async function run(s: Awaited<ReturnType<typeof session>>, slug: string, args: Record<string, unknown>) {
   const r = await s.execute(slug, args);
-  if (r.resultType !== "completed") throw new Error(typeof r.error === "string" && r.error ? r.error : `${slug} ${r.resultType}`);
+  if (r.resultType !== "completed") {
+    const reason = typeof r.error === "string" && r.error ? r.error : `${slug} ${r.resultType}`;
+    // The Composio log id lets you look the failed call up in the Composio dashboard.
+    throw new Error(r.logId ? `${reason}, Composio log ${r.logId}` : reason);
+  }
   return r.data as Record<string, unknown>;
 }
 
