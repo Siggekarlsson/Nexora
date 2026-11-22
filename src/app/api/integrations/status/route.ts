@@ -3,12 +3,17 @@ import { gmailConfigured } from "@/lib/integrations/gmail";
 import { driveConfigured } from "@/lib/integrations/drive";
 import { shopifyConfigured } from "@/lib/integrations/shopify";
 import { readConn } from "@/lib/integrations/vault";
-import { appStatus, composioConfigured, readUid } from "@/lib/integrations/composio";
+import { appStatus, composioConfigured, describe, readUid } from "@/lib/integrations/composio";
 
 export async function GET(req: NextRequest) {
   if (composioConfigured()) {
     const uid = readUid(req);
-    const st = uid ? await appStatus(uid).catch(() => null) : null;
+    const st = uid
+      ? await appStatus(uid).catch((e) => {
+          console.error("[composio] status failed:", describe(e));
+          return null;
+        })
+      : null;
     const one = (id: "gmail" | "drive" | "shopify") => ({ configured: true, connected: !!st?.[id].connected, account: null });
     return NextResponse.json({ via: "composio", gmail: one("gmail"), drive: one("drive"), shopify: one("shopify") });
   }
