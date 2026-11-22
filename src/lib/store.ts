@@ -25,6 +25,14 @@ export type Notice = { id: string; title: string; body: string; time: string; co
 
 const KEY = "nexora.state.v1";
 
+/** Integrations that connect for real. Everything else is "Coming soon" and can never be connected. */
+export const LIVE_INTEGRATIONS = ["gmail", "drive", "shopify"] as const;
+
+/** Drops old simulated connections (e.g. hubspot: true) saved by earlier versions. */
+function onlyLive(integrations: Record<string, boolean> = {}) {
+  return Object.fromEntries(Object.entries(integrations).filter(([k]) => (LIVE_INTEGRATIONS as readonly string[]).includes(k)));
+}
+
 const initial: AppState = {
   threads: seedThreads,
   files: [],
@@ -53,7 +61,10 @@ function load() {
   loaded = true;
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) state = { ...initial, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw);
+      state = { ...initial, ...saved, integrations: onlyLive(saved.integrations) };
+    }
   } catch {}
 }
 

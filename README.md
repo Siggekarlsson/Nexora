@@ -20,6 +20,36 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Integrations
+
+Gmail, Google Drive and Shopify connect for real through OAuth. Tokens are stored encrypted in an httpOnly cookie per browser (`src/lib/integrations/vault.ts`). All other integrations are shown as "Coming soon". Without keys, the Integrations page shows a "How to set up" button with these steps and the exact redirect URIs for your site.
+
+| Integration | Environment variables | Redirect URI |
+| --- | --- | --- |
+| Gmail | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_URL` | `<APP_URL>/api/integrations/gmail/callback` |
+| Google Drive | same Google client as Gmail | `<APP_URL>/api/integrations/drive/callback` |
+| Shopify | `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `APP_URL` | `<APP_URL>/api/integrations/shopify/callback` |
+
+When a chat message is about email, files/documents/reports or orders/products, the chat API reads the connected account (latest inbox messages, latest Drive files with the text of Google Docs and txt/md/csv files up to ~20,000 characters, or recent Shopify orders) and passes it to the AI as data, never as instructions.
+
+### Google-nycklar (Gmail och Google Drive)
+
+1. Gå till [console.cloud.google.com](https://console.cloud.google.com) och skapa ett projekt, t.ex. "Nexora".
+2. Gå till **APIs & Services → Library** och aktivera **Gmail API** och **Google Drive API**.
+3. Gå till **OAuth consent screen**: välj **External**, fyll i appnamn och e-post, och lägg till din egen Gmail som **Test user**.
+4. Gå till **Credentials → Create credentials → OAuth client ID → Web application**. Lägg in båda redirect-URI:erna under **Authorized redirect URIs**:
+   - `https://<din-sida>/api/integrations/gmail/callback`
+   - `https://<din-sida>/api/integrations/drive/callback`
+5. Kopiera **Client ID** och **Client secret**.
+6. I **Vercel → Project → Settings → Environment Variables**: lägg in `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` och `APP_URL=https://<din-sida>` (din fasta adress, t.ex. `nexora-gilt-gamma.vercel.app`). Gör sedan en **Redeploy**.
+
+### Shopify
+
+1. Skapa ett gratis konto på [dev.shopify.com](https://dev.shopify.com) och en dev store om du saknar butik.
+2. Skapa en app. App URL: `https://<din-sida>`, redirect URL: `https://<din-sida>/api/integrations/shopify/callback`.
+3. Lägg till scopes `read_orders` och `read_products` och släpp en version av appen.
+4. Lägg in `SHOPIFY_API_KEY` (Client ID), `SHOPIFY_API_SECRET` (Client secret) och `APP_URL` i Vercel och gör en **Redeploy**.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

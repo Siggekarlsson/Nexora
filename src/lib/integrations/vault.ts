@@ -7,8 +7,9 @@ import type { NextRequest, NextResponse } from "next/server";
  */
 
 export type GmailConn = { refresh?: string; access: string; expires: number; email?: string };
+export type DriveConn = { refresh?: string; access: string; expires: number; email?: string };
 export type ShopifyConn = { shop: string; token: string; name?: string };
-type Conns = { gmail: GmailConn; shopify: ShopifyConn };
+type Conns = { gmail: GmailConn; drive: DriveConn; shopify: ShopifyConn };
 export type IntegrationId = keyof Conns;
 
 function secret() {

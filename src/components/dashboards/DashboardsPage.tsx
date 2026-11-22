@@ -180,6 +180,7 @@ function Apps() {
             <Blocks size={16} className="text-muted" />
             <span className="font-medium">{a.name}</span>
             <span className="text-muted">feeds {a.used}</span>
+            {/* none of these apps can be connected yet, so their dashboards always run on sample data */}
             <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] ${integrations[a.id] ? "bg-[#5fe08a]/15 text-[#5fe08a]" : "bg-hover text-muted"}`}>
               {integrations[a.id] ? "Connected" : "Sample data"}
             </span>
