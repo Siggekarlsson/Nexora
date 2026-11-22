@@ -8,6 +8,7 @@ import { departments, allSkills } from "@/data/tree";
 import { brain, departmentColors } from "@/data/departments";
 import { PixelAvatar } from "@/components/brand/PixelAvatar";
 import { DynamicIcon } from "@/components/ui/DynamicIcon";
+import { useStore } from "@/lib/store";
 
 export type ComposerTarget =
   | { kind: "agent"; id: DepartmentId; label: string; color: string }
@@ -37,16 +38,18 @@ export function Composer({ placeholder = "Ask anything, or type / for an agent o
   const [target, setTarget] = useState<ComposerTarget | null>(initialTarget);
   const [idx, setIdx] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const custom = useStore((s) => s.customSkills);
 
   const slash = /(?:^|\s)\/([\w-]*)$/.exec(text);
   const query = slash?.[1]?.toLowerCase() ?? "";
   const options = useMemo(() => {
     if (!slash) return [];
     const a = agentOptions.filter((o) => o.label.toLowerCase().includes(query));
-    const s = skillOptions.filter((o) => o.label.toLowerCase().includes(query)).slice(0, query ? 8 : 5);
+    const customOpts: Option[] = custom.map((c) => ({ kind: "skill", id: c.id, departmentId: c.departmentId, label: c.name, color: departmentColors[c.departmentId], sub: "your skill", icon: c.icon }));
+    const s = [...customOpts, ...skillOptions].filter((o) => o.label.toLowerCase().includes(query)).slice(0, query ? 8 : 5);
     return [...a, ...s];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, !!slash]);
+  }, [query, !!slash, custom]);
 
   const pick = (o: Option) => {
     setTarget(o.kind === "agent" ? { kind: "agent", id: o.id, label: o.label, color: o.color } : { kind: "skill", id: o.id, departmentId: o.departmentId, label: o.label, color: o.color });

@@ -14,7 +14,7 @@ import { JobPanel } from "./JobPanel";
 import type { TreeMode } from "./layout";
 import { Composer } from "@/components/chat/Composer";
 import { PixelAvatar } from "@/components/brand/PixelAvatar";
-import { threads } from "@/data/threads";
+import { useStore } from "@/lib/store";
 import { departmentColors, departmentName } from "@/data/departments";
 import { allSkills, radialOrder } from "@/data/tree";
 
@@ -26,6 +26,7 @@ export function SkillTreeHome() {
   const [mode, setMode] = useState<TreeMode>("radial");
   const [editing, setEditing] = useState(false);
   const [offsets, setOffsets] = useState<Record<TreeMode, Offsets>>({ radial: {}, line: {} });
+  const threads = useStore((st) => st.threads);
   const focus = (params.get("dept") as DepartmentId | null) ?? null;
   const jobId = params.get("job");
   const job = jobId ? allSkills.find((s) => s.id === jobId) ?? null : null;
@@ -166,7 +167,7 @@ export function SkillTreeHome() {
                   className="flex shrink-0 items-center gap-2 rounded-full glass px-3 py-1.5 text-xs text-muted transition-colors hover:text-fg"
                 >
                   <PixelAvatar id={t.departmentId} color={departmentColors[t.departmentId]} size={13} />
-                  {departmentName(t.departmentId)} · {t.title}
+                  <span className="max-w-[200px] truncate">{departmentName(t.departmentId)} · {t.title}</span>
                 </Link>
               ))}
             </div>

@@ -1,5 +1,6 @@
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+
+import { SettingsPage } from "@/components/pages/SettingsPage";
 
 export default function Page() {
-  return <PagePlaceholder title="Settings" subtitle="Workspace, profile and preferences." step={5} />;
+  return <SettingsPage />;
 }

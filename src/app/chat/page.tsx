@@ -1,5 +1,10 @@
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { Suspense } from "react";
+import { ChatApp } from "@/components/chat/ChatApp";
 
-export default function Page() {
-  return <PagePlaceholder title="Chat" subtitle="Talk to Company Brain or any department agent." step={4} />;
+export default function ChatPage() {
+  return (
+    <Suspense>
+      <ChatApp />
+    </Suspense>
+  );
 }

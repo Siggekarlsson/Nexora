@@ -5,11 +5,16 @@ import { useState } from "react";
 import { Check, ChevronRight } from "lucide-react";
 import { Popover } from "@/components/ui/Popover";
 import { onboardingSteps } from "@/data/threads";
+import { useStore } from "@/lib/store";
 
 export function GettingStarted() {
   const [open, setOpen] = useState(false);
-  const done = onboardingSteps.filter((s) => s.done).length;
-  const total = onboardingSteps.length;
+  const hasFiles = useStore((st) => st.files).length > 0;
+  const integrations = useStore((st) => st.integrations);
+  const connected = Object.entries(integrations).some(([k, v]) => v && k !== "gmail");
+  const steps = onboardingSteps.map((s) => ({ ...s, done: s.done || (s.id === "brain" && hasFiles) || (s.id === "integration" && connected) }));
+  const done = steps.filter((s) => s.done).length;
+  const total = steps.length;
   return (
     <div className="relative">
       <button onClick={() => setOpen((o) => !o)} className="btn btn-glass rounded-full pl-2.5">
@@ -25,7 +30,7 @@ export function GettingStarted() {
           </div>
         </div>
         <ul className="mt-1 space-y-0.5">
-          {onboardingSteps.map((s) => {
+          {steps.map((s) => {
             const inner = (
               <>
                 <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${s.done ? "border-transparent bg-finance/20 text-finance" : "border-line"}`}>

@@ -1,5 +1,6 @@
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+
+import { ReadyPage } from "@/components/pages/ReadyPage";
 
 export default function Page() {
-  return <PagePlaceholder title="Start your trial" subtitle="Get your workspace ready." step={5} />;
+  return <ReadyPage />;
 }
