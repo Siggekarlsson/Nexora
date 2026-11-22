@@ -206,8 +206,17 @@ export async function composioConnect(req: NextRequest, app: AppId, appOrigin: s
     const uid = ensureUid(req, res);
     const url = await connectUrl(uid, app, `${appOrigin}/api/integrations/composio/callback?app=${app}`);
     res.headers.set("location", url);
-  } catch {
+  } catch (e) {
+    console.error(`[composio] connect ${app} failed:`, describe(e));
     res.headers.set("location", `${appOrigin}/integrations?error=${app}_failed`);
   }
   return res;
+}
+
+/** Error summary for server logs: class, message, status and Composio log id. Never includes the API key. */
+export function describe(e: unknown) {
+  if (!(e instanceof Error)) return String(e);
+  const x = e as Error & { status?: number; code?: string; logId?: string; cause?: unknown };
+  const cause = x.cause instanceof Error ? ` (cause: ${x.cause.message})` : "";
+  return `${x.name}: ${x.message}${x.status ? ` [${x.status}]` : ""}${x.code ? ` [${x.code}]` : ""}${x.logId ? ` [log ${x.logId}]` : ""}${cause}`;
 }
