@@ -4,7 +4,7 @@ import type { DepartmentId } from "@/lib/types";
  * Original 9-column pixel sprites for each department agent.
  * '#' = body pixel, 'o' = eye (rendered dark), '.' = empty.
  */
-const sprites: Record<DepartmentId, string[]> = {
+export const sprites: Record<DepartmentId, string[]> = {
   research: [
     ".#.....#.",
     "..#####..",

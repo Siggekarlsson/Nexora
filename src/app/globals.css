@@ -143,3 +143,11 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.twinkle {
+  animation: twinkle 4.5s ease-in-out infinite;
+}
