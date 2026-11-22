@@ -3,27 +3,27 @@ import { gmailConfigured } from "@/lib/integrations/gmail";
 import { driveConfigured } from "@/lib/integrations/drive";
 import { shopifyConfigured } from "@/lib/integrations/shopify";
 import { readConn } from "@/lib/integrations/vault";
-import { appStatus, composioConfigured, describe, readUid } from "@/lib/integrations/composio";
+import { appStatus, composioConfigured, describe, readUid, viaComposio, type AppId } from "@/lib/integrations/composio";
 
 export async function GET(req: NextRequest) {
-  if (composioConfigured()) {
-    const uid = readUid(req);
-    const st = uid
+  const uid = readUid(req);
+  const st =
+    composioConfigured() && uid
       ? await appStatus(uid).catch((e) => {
           console.error("[composio] status failed:", describe(e));
           return null;
         })
       : null;
-    const one = (id: "gmail" | "drive" | "shopify") => ({ configured: true, connected: !!st?.[id].connected, account: null });
-    return NextResponse.json({ via: "composio", gmail: one("gmail"), drive: one("drive"), shopify: one("shopify") });
-  }
+  const composio = (id: AppId) => ({ via: "composio", configured: true, connected: !!st?.[id]?.connected, account: null });
+
   const g = gmailConfigured() ? readConn(req, "gmail") : null;
   const d = driveConfigured() ? readConn(req, "drive") : null;
   const s = shopifyConfigured() ? readConn(req, "shopify") : null;
   return NextResponse.json({
-    via: "oauth",
-    gmail: { configured: gmailConfigured(), connected: !!g, account: g?.email ?? null },
-    drive: { configured: driveConfigured(), connected: !!d, account: d?.email ?? null },
-    shopify: { configured: shopifyConfigured(), connected: !!s, account: s ? s.name ?? s.shop : null },
+    gmail: viaComposio("gmail") ? composio("gmail") : { via: "oauth", configured: gmailConfigured(), connected: !!g, account: g?.email ?? null },
+    drive: viaComposio("drive") ? composio("drive") : { via: "oauth", configured: driveConfigured(), connected: !!d, account: d?.email ?? null },
+    shopify: viaComposio("shopify")
+      ? composio("shopify")
+      : { via: "oauth", configured: shopifyConfigured(), connected: !!s, account: s ? s.name ?? s.shop : null },
   });
 }

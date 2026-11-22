@@ -12,7 +12,15 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export type AppId = "gmail" | "drive" | "shopify";
 export const TOOLKIT: Record<AppId, string> = { gmail: "gmail", drive: "googledrive", shopify: "shopify" };
-const APPS = Object.keys(TOOLKIT) as AppId[];
+
+/**
+ * Composio has managed sign-in for Gmail and Google Drive. Shopify has none, so it needs an auth config
+ * made with your own Shopify app in the Composio dashboard; without one, Shopify uses Nexora's own OAuth.
+ */
+const shopifyAuthConfig = () => process.env.COMPOSIO_SHOPIFY_AUTH_CONFIG_ID?.trim() || undefined;
+const composioApps = (): AppId[] => (shopifyAuthConfig() ? ["gmail", "drive", "shopify"] : ["gmail", "drive"]);
+/** True when this app connects through Composio. */
+export const viaComposio = (app: AppId) => composioConfigured() && composioApps().includes(app);
 
 const key = () => process.env.COMPOSIO_API_KEY?.trim().replace(/^["']|["']$/g, "") || undefined;
 export const composioConfigured = () => !!key();
@@ -49,7 +57,11 @@ async function session(uid: string) {
       sessions.delete(uid);
     }
   }
-  const s = await composio().create(uid, { toolkits: Object.values(TOOLKIT) });
+  const sac = shopifyAuthConfig();
+  const s = await composio().create(uid, {
+    toolkits: composioApps().map((a) => TOOLKIT[a]),
+    ...(sac ? { authConfigs: { shopify: sac } } : {}),
+  });
   if (sessions.size > 5000) sessions.clear();
   sessions.set(uid, s.sessionId);
   return s;
@@ -66,11 +78,12 @@ export async function connectUrl(uid: string, app: AppId, callbackUrl: string) {
 type AppStatus = { connected: boolean; accountId?: string };
 
 /** Which of the apps this user has an active connection for. */
-export async function appStatus(uid: string): Promise<Record<AppId, AppStatus>> {
+export async function appStatus(uid: string): Promise<Partial<Record<AppId, AppStatus>>> {
   const s = await session(uid);
-  const { items } = await s.toolkits({ toolkits: Object.values(TOOLKIT) });
-  const out = {} as Record<AppId, AppStatus>;
-  for (const app of APPS) {
+  const apps = composioApps();
+  const { items } = await s.toolkits({ toolkits: apps.map((a) => TOOLKIT[a]) });
+  const out: Partial<Record<AppId, AppStatus>> = {};
+  for (const app of apps) {
     const item = items.find((i) => i.slug === TOOLKIT[app]);
     out[app] = { connected: !!item?.connection?.isActive, accountId: item?.connection?.connectedAccount?.id };
   }
@@ -78,7 +91,7 @@ export async function appStatus(uid: string): Promise<Record<AppId, AppStatus>> 
 }
 
 export async function disconnect(uid: string, app: AppId) {
-  const { accountId } = (await appStatus(uid))[app];
+  const accountId = (await appStatus(uid))[app]?.accountId;
   if (accountId) await composio().connectedAccounts.delete(accountId);
 }
 
@@ -109,12 +122,13 @@ const READABLE = /^(application\/vnd\.google-apps\.document|text\/(plain|markdow
 
 /** Live data for the chat: what's connected and relevant to the message. */
 export async function composioContext(uid: string, want: Record<AppId, boolean>) {
-  if (!APPS.some((a) => want[a])) return [];
+  const apps = composioApps();
+  if (!apps.some((a) => want[a])) return [];
   const status = await appStatus(uid);
   const s = await session(uid);
   const parts: string[] = [];
 
-  if (want.gmail && status.gmail.connected) {
+  if (want.gmail && status.gmail?.connected) {
     try {
       const data = await run(s, "GMAIL_FETCH_EMAILS", { max_results: 15, label_ids: ["INBOX"], verbose: false, include_payload: false });
       const mails = pick(data, ["messages"]);
@@ -129,7 +143,7 @@ export async function composioContext(uid: string, want: Record<AppId, boolean>)
     }
   }
 
-  if (want.drive && status.drive.connected) {
+  if (want.drive && status.drive?.connected) {
     try {
       const data = await run(s, "GOOGLEDRIVE_FIND_FILE", {
         q: "trashed = false and mimeType != 'application/vnd.google-apps.folder'",
@@ -161,7 +175,7 @@ export async function composioContext(uid: string, want: Record<AppId, boolean>)
     }
   }
 
-  if (want.shopify && status.shopify.connected) {
+  if (want.shopify && status.shopify?.connected) {
     try {
       const [o, p] = await Promise.all([
         run(s, "SHOPIFY_GET_ORDERS_WITH_FILTERS", { status: "any", limit: 15, fields: "name,created_at,total_price,currency,financial_status,fulfillment_status" }),

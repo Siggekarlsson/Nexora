@@ -3,7 +3,7 @@ import { freshGmail, gmailConfigured, recentMail } from "./gmail";
 import { driveConfigured, fileText, freshDrive, isReadable, recentFiles } from "./drive";
 import { shopifyConfigured, shopSnapshot } from "./shopify";
 import { readConn, type DriveConn, type GmailConn } from "./vault";
-import { composioConfigured, composioContext, readUid } from "./composio";
+import { composioConfigured, composioContext, readUid, viaComposio } from "./composio";
 
 const MAIL = /\b(e-?mail|mail|mejl|inbox|inkorg|gmail|brev|svara|reply|correspondence)/i;
 const FILES = /\b(fil|file|dokument|document|doc|rapport|report|drive|modell|model|memo|pm|anteckning|notes?)/i;
@@ -27,10 +27,9 @@ export async function integrationContext(req: NextRequest, text: string) {
         parts.push(`The user's connected apps could not be reached (${(e as Error).message}). Tell the user.`);
       }
     }
-    return { context: wrap(parts), gmail, drive };
   }
 
-  const g = gmailConfigured() ? readConn(req, "gmail") : null;
+  const g = gmailConfigured() && !viaComposio("gmail") ? readConn(req, "gmail") : null;
   if (g && MAIL.test(text)) {
     try {
       const fresh = await freshGmail(g);
@@ -45,7 +44,7 @@ export async function integrationContext(req: NextRequest, text: string) {
     }
   }
 
-  const dc = driveConfigured() ? readConn(req, "drive") : null;
+  const dc = driveConfigured() && !viaComposio("drive") ? readConn(req, "drive") : null;
   if (dc && FILES.test(text)) {
     try {
       const fresh = await freshDrive(dc);
@@ -66,7 +65,7 @@ export async function integrationContext(req: NextRequest, text: string) {
     }
   }
 
-  const s = shopifyConfigured() ? readConn(req, "shopify") : null;
+  const s = shopifyConfigured() && !viaComposio("shopify") ? readConn(req, "shopify") : null;
   if (s && SHOP.test(text)) {
     try {
       const d = await shopSnapshot(s);

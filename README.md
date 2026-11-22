@@ -26,12 +26,14 @@ Gmail, Google Drive and Shopify connect for real. All other integrations are sho
 
 ### Rekommenderat: Composio (en nyckel)
 
-[Composio](https://composio.dev) sköter inloggningen mot Google och Shopify med sina egna godkända appar, så du behöver ingen egen Google Cloud- eller Shopify-app (`src/lib/integrations/composio.ts`).
+[Composio](https://composio.dev) sköter inloggningen mot Google med sina egna godkända appar, så du behöver ingen egen Google Cloud-app för Gmail och Google Drive (`src/lib/integrations/composio.ts`).
+
+Shopify har ingen delad app hos Composio. Antingen använder du Nexoras egen Shopify-koppling (stegen nedan), eller så skapar du en Shopify auth config med din egen Shopify-app i Composio-dashboarden och lägger dess id i `COMPOSIO_SHOPIFY_AUTH_CONFIG_ID`.
 
 1. Skapa ett gratis konto på [dashboard.composio.dev](https://dashboard.composio.dev).
 2. Gå till **Settings → API Keys** och kopiera nyckeln.
 3. I **Vercel → Project → Settings → Environment Variables**: lägg in `COMPOSIO_API_KEY` och `APP_URL=https://<din-sida>`. Gör sedan en **Redeploy**.
-4. Klicka **Connect** på Gmail, Google Drive eller Shopify i Nexora och logga in.
+4. Klicka **Connect** på Gmail eller Google Drive i Nexora och logga in.
 
 Varje webbläsare får ett slumpat användar-id i en httpOnly-cookie (`nx_uid`), och Composio håller den användarens kopplingar. När `COMPOSIO_API_KEY` finns används Composio; annars används de egna OAuth-apparna nedan.
 

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { clearConn, type IntegrationId } from "@/lib/integrations/vault";
-import { composioConfigured, disconnect, readUid } from "@/lib/integrations/composio";
+import { disconnect, readUid, viaComposio } from "@/lib/integrations/composio";
 
 export async function POST(req: NextRequest) {
   const { id } = (await req.json()) as { id: IntegrationId };
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   const res = NextResponse.json({ ok: true });
   clearConn(res, id);
   const uid = readUid(req);
-  if (composioConfigured() && uid) {
+  if (viaComposio(id) && uid) {
     try {
       await disconnect(uid, id);
     } catch {
