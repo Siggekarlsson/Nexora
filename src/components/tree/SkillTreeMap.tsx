@@ -27,7 +27,7 @@ const deptById = Object.fromEntries(departments.map((d) => [d.id, d]));
 const skillById = Object.fromEntries(allSkills.map((s) => [s.id, s]));
 // deterministic packet routes: a few per department
 const packets = departments.flatMap((d, di) =>
-  [0, 1].map((k) => {
+  [0].map((k) => {
     const g = d.subGroups[(di + k) % d.subGroups.length];
     const j = g.skills[(di * 3 + k) % g.skills.length];
     return { id: `${d.id}-${k}`, dept: d.id, group: g.id, job: j.id, delay: di * 0.7 + k * 3.1, wait: 3 + ((di * 7 + k * 5) % 6) };
@@ -44,6 +44,17 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
   const [hoverDept, setHoverDept] = useState<DepartmentId | null>(null);
   const [hoverJob, setHoverJob] = useState<string | null>(null);
   const [drag, setDrag] = useState<null | { key: string; sx: number; sy: number; ox: number; oy: number }>(null);
+
+  // screen pixels per SVG unit, so text can be sized in real pixels
+  const [k, setK] = useState(1);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setK(Math.min(e.contentRect.width / VIEW.w, e.contentRect.height / VIEW.h) || 1));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const px = (n: number) => n / k;
 
   const byId = useMemo(() => Object.fromEntries(layout.nodes.map((n) => [n.id, n])), [layout]);
 
@@ -144,13 +155,13 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
         <defs>
           {departments.map((d) => (
             <radialGradient key={d.id} id={`glow-${d.id}`}>
-              <stop offset="0%" stopColor={d.color} stopOpacity={0.3} />
+              <stop offset="0%" stopColor={d.color} stopOpacity={0.22} />
               <stop offset="100%" stopColor={d.color} stopOpacity={0} />
             </radialGradient>
           ))}
           <radialGradient id="glow-brain">
-            <stop offset="0%" stopColor={brain.color} stopOpacity={0.45} />
-            <stop offset="60%" stopColor="#5b3cff" stopOpacity={0.12} />
+            <stop offset="0%" stopColor={brain.color} stopOpacity={0.32} />
+            <stop offset="55%" stopColor="#5b3cff" stopOpacity={0.09} />
             <stop offset="100%" stopColor="#5b3cff" stopOpacity={0} />
           </radialGradient>
           <radialGradient id="brain-core">
@@ -163,13 +174,13 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
         <g style={{ opacity: "var(--nebula-opacity)" }}>
           {deptNodes.map((n) => {
             const p = pos(n);
-            const k = mode === "radial" ? 1.75 : 1;
+            const f = mode === "radial" ? 1.6 : 1;
             return (
               <motion.circle
                 key={`glow-${n.id}`}
                 fill={`url(#glow-${n.deptId})`}
                 initial={{ opacity: 0, r: 120 }}
-                animate={{ opacity: hoverDept === n.deptId ? 1 : 0.75, cx: p.x * k, cy: p.y * (mode === "radial" ? k : 1), r: mode === "radial" ? 230 : 140 }}
+                animate={{ opacity: hoverDept === n.deptId ? 0.9 : 0.55, cx: p.x * f, cy: p.y * (mode === "radial" ? f : 1), r: mode === "radial" ? 270 : 140 }}
                 transition={{ opacity: { duration: 1.2, delay: 0.3 }, default: spring }}
               />
             );
@@ -177,7 +188,7 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
           <motion.circle
             fill="url(#glow-brain)"
             initial={{ r: 0 }}
-            animate={{ r: mode === "radial" ? 260 : 160, cx: pos(byId.brain).x, cy: 0 }}
+            animate={{ r: mode === "radial" ? 420 : 160, cx: pos(byId.brain).x, cy: 0 }}
             transition={{ duration: 1.4 }}
           />
         </g>
@@ -186,8 +197,6 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
           x={pos(byId.brain).x}
           y={pos(byId.brain).y}
           visible={mode === "radial" && !editing}
-          jobs={allSkills.length}
-          ready={allSkills.filter((x) => x.readyToRun).length}
         />
 
         {/* edges */}
@@ -207,9 +216,9 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
                     animate={{ pathLength: 1, opacity: 1, x1: a.x, y1: a.y, x2: b.x, y2: b.y }}
                     transition={edgeT(n)}
                     stroke={color}
-                    style={color ? undefined : { stroke: "rgba(var(--star),0.16)" }}
-                    strokeOpacity={n.kind === "dept" ? 0.55 : n.kind === "group" ? 0.4 : 1}
-                    strokeWidth={n.kind === "dept" ? 1.2 : 0.8}
+                    style={color ? undefined : { stroke: "rgba(var(--star),0.12)" }}
+                    strokeOpacity={n.kind === "dept" ? 0.4 : n.kind === "group" ? 0.3 : 1}
+                    strokeWidth={n.kind === "dept" ? 0.8 : 0.5}
                   />
                 );
               })}
@@ -230,7 +239,7 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
                       initial={{ opacity: 0, scale: 0, cx: p.x, cy: p.y }}
                       animate={{ opacity: 1, scale: 1, cx: p.x, cy: p.y }}
                       transition={t(n)}
-                      r={editing ? 6 : 3.4}
+                      r={editing ? 6 : 2.2}
                       fill={d.color}
                       fillOpacity={0.85}
                       stroke={editing ? d.color : "none"}
@@ -260,20 +269,20 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
                       initial={{ opacity: 0, scale: 0, cx: p.x, cy: p.y }}
                       animate={{ opacity: 1, scale: 1, cx: p.x, cy: p.y }}
                       transition={t(n)}
-                      r={10}
+                      r={8}
                       fill="transparent"
                     />
                     {ready && (
                       <motion.circle
                         initial={{ opacity: 0, cx: p.x, cy: p.y }}
-                        animate={{ opacity: 0.28, cx: p.x, cy: p.y, r: hot ? 11 : 8 }}
+                        animate={{ opacity: 0.18, cx: p.x, cy: p.y, r: hot ? 8 : 5.5 }}
                         transition={t(n)}
                         fill={d.color}
                       />
                     )}
                     <motion.circle
                       initial={{ opacity: 0, scale: 0, cx: p.x, cy: p.y }}
-                      animate={{ opacity: 1, scale: 1, cx: p.x, cy: p.y, r: (ready ? 4 : 2.6) * (hot ? 1.5 : 1) }}
+                      animate={{ opacity: 1, scale: 1, cx: p.x, cy: p.y, r: (ready ? 2.8 : 1.6) * (hot ? 1.6 : 1) }}
                       transition={t(n)}
                       style={ready ? { fill: d.color } : { fill: hot ? d.color : "rgba(var(--star),0.6)" }}
                       stroke={editing ? d.color : "none"}
@@ -298,9 +307,9 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
             return (
               <motion.circle
                 key={`${pk.id}-${mode}-${Math.round(d.x)}-${Math.round(d.y)}`}
-                r={2.4}
+                r={1.8}
                 fill={color}
-                style={{ filter: `drop-shadow(0 0 4px ${color})` }}
+                style={{ filter: `drop-shadow(0 0 3px ${color})` }}
                 initial={{ cx: b.x, cy: b.y, opacity: 0 }}
                 animate={{ cx: [b.x, d.x, g.x, j.x], cy: [b.y, d.y, g.y, j.y], opacity: [0, 1, 1, 0] }}
                 transition={{ duration: 2.6, times: [0, 0.4, 0.7, 1], ease: "easeInOut", repeat: Infinity, repeatDelay: pk.wait, delay: 2 + pk.delay }}
@@ -328,10 +337,10 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
             >
               <motion.circle
                 initial={false}
-                animate={{ cx: p.x, cy: p.y, r: active ? 31 : 26 }}
+                animate={{ cx: p.x, cy: p.y, r: active ? 26 : 22 }}
                 transition={{ cx: posTransition(d.id), cy: posTransition(d.id), r: { duration: 0.2 } }}
                 fill={d.color}
-                fillOpacity={0.16}
+                fillOpacity={0.12}
                 stroke={d.color}
                 strokeOpacity={active ? 0.95 : 0.6}
                 strokeWidth={1.2}
@@ -340,17 +349,17 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
               />
               <motion.g initial={false} animate={{ x: p.x, y: p.y }} transition={posTransition(d.id)}>
                 <motion.g animate={{ y: [0, -3, 0] }} transition={{ duration: 2.4 + (n.order * 10) % 1.5, repeat: Infinity, ease: "easeInOut" }}>
-                  <PixelSprite id={d.avatar} cx={0} cy={0} size={active ? 26 : 22} color={d.color} />
+                  <PixelSprite id={d.avatar} cx={0} cy={0} size={active ? 22 : 19} color={d.color} />
                 </motion.g>
               </motion.g>
             </motion.g>
           );
         })}
 
-        {/* brain */}
+        {/* brain: just the label, on the soft glow */}
         {(() => {
           const p = pos(byId.brain);
-          const r = mode === "radial" ? 66 : 46;
+          const radial = mode === "radial";
           return (
             <motion.g
               initial={{ opacity: 0 }}
@@ -360,28 +369,11 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
               style={{ cursor: "pointer" }}
               onPointerDown={(e) => startDrag(e, byId.brain)}
             >
-              <motion.circle
-                cx={0} cy={0}
-                fill="none" stroke={brain.color}
-                initial={{ r, opacity: 0.5 }}
-                animate={{ r: [r, r + 34], opacity: [0.45, 0] }}
-                transition={{ duration: 3.2, repeat: Infinity, ease: "easeOut" }}
-              />
-              <motion.circle
-                cx={0} cy={0}
-                initial={{ r: 0 }}
-                animate={{ r }}
-                transition={{ type: "spring", stiffness: 120, damping: 14 }}
-                fill="url(#brain-core)"
-                stroke={brain.color}
-                strokeOpacity={0.55}
-                style={{ filter: `drop-shadow(0 0 18px ${brain.color}88)` }}
-              />
-              <PixelSprite id="brain" cx={0} cy={mode === "radial" ? -22 : -14} size={mode === "radial" ? 18 : 14} color={brain.color} />
-              <text textAnchor="middle" y={mode === "radial" ? 6 : 6} fontSize={mode === "radial" ? 9.5 : 7} letterSpacing={mode === "radial" ? 2.2 : 1.4} style={{ fontFamily: "var(--font-display)", fill: "#ecebf2" }}>
+              <circle r={radial ? 60 : 40} fill="transparent" />
+              <text textAnchor="middle" y={-2} fontSize={px(radial ? 14 : 12)} letterSpacing={px(radial ? 4 : 3)} style={{ fontFamily: "var(--font-display)", fill: "var(--fg)" }}>
                 FEED THE BRAIN
               </text>
-              <text textAnchor="middle" y={mode === "radial" ? 22 : 19} fontSize={mode === "radial" ? 9 : 7.5} style={{ fill: "#8d8a99" }}>
+              <text textAnchor="middle" y={px(radial ? 18 : 15)} fontSize={px(12)} style={{ fill: "var(--muted)" }}>
                 {docCount === 0 ? "No documents yet" : `${docCount} document${docCount === 1 ? "" : "s"}`}
               </text>
             </motion.g>
@@ -403,11 +395,11 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
               onClick={() => !editing && onSelectDept(l.deptId)}
               style={{ cursor: "pointer" }}
             >
-              <rect x={l.anchor === "end" ? -230 : l.anchor === "middle" ? -130 : -10} y={-22} width={l.anchor === "middle" ? 260 : 240} height={52} fill="transparent" />
+              <rect x={l.anchor === "end" ? -px(300) : l.anchor === "middle" ? -px(160) : -px(10)} y={-px(24)} width={px(l.anchor === "middle" ? 320 : 310)} height={px(60)} fill="transparent" />
               <text
                 textAnchor={l.anchor}
-                fontSize={mode === "radial" ? 16 : 13}
-                letterSpacing={mode === "radial" ? 7 : 5}
+                fontSize={px(mode === "radial" ? 16 : 14)}
+                letterSpacing={px(mode === "radial" ? 4.8 : 3.6)}
                 style={{
                   fontFamily: "var(--font-display)",
                   fill: hoverDept === l.deptId ? d.color : "var(--fg)",
@@ -417,14 +409,14 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
               >
                 {d.name.toUpperCase()}
               </text>
-              <text textAnchor={l.anchor} y={mode === "radial" ? 20 : 16} fontSize={mode === "radial" ? 10.5 : 9.5} letterSpacing={0.4} style={{ fill: "var(--muted)" }}>
+              <text textAnchor={l.anchor} y={px(mode === "radial" ? 21 : 18)} fontSize={px(13)} letterSpacing={px(0.2)} style={{ fill: "var(--muted)" }}>
                 {d.tagline.join(" · ")}
               </text>
               <motion.text
                 textAnchor={l.anchor}
-                y={mode === "radial" ? 38 : 32}
-                fontSize={9}
-                letterSpacing={3}
+                y={px(mode === "radial" ? 40 : 34)}
+                fontSize={px(11)}
+                letterSpacing={px(2.5)}
                 initial={false}
                 animate={{ opacity: hoverDept === l.deptId ? 1 : 0 }}
                 style={{ fill: d.color, fontFamily: "ui-monospace, monospace" }}
@@ -443,10 +435,10 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
               x={g.x}
               y={g.y}
               dominantBaseline="middle"
-              fontSize={9}
-              letterSpacing={1.6}
+              fontSize={px(12)}
+              letterSpacing={px(1.2)}
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.8 }}
+              animate={{ opacity: 0.85 }}
               exit={{ opacity: 0 }}
               transition={{ delay: 0.5 }}
               style={{ fill: "var(--muted)", textTransform: "uppercase" }}
@@ -459,7 +451,7 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
 
       {/* tooltips */}
       <AnimatePresence>
-        {hovered && !hoveredJob && !drag && !focus && (() => {
+        {hovered && !hoveredJob && !drag && !editing && !focus && (() => {
           const hp = pos(byId[hovered.id]);
           const s = toScreen(hp.x, hp.y);
           const above = hp.y < 0;
@@ -491,7 +483,7 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
             </motion.div>
           );
         })()}
-        {hoveredJob && !drag && !focus && (() => {
+        {hoveredJob && !drag && !editing && !focus && (() => {
           const s = toScreen(pos(byId[hoveredJob.id]).x, pos(byId[hoveredJob.id]).y);
           return (
             <motion.div

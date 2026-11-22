@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DepartmentId } from "@/lib/types";
 import { departments, allSkills } from "@/data/tree";
 import { brain, departmentColors } from "@/data/departments";
@@ -20,9 +20,7 @@ const agentOptions: Option[] = [
   { kind: "agent", id: "brain", label: brain.name, color: brain.color, sub: "Searches every document" },
   ...departments.map((d) => ({ kind: "agent" as const, id: d.id, label: d.name, color: d.color, sub: d.tagline.join(" · ") })),
 ];
-const skillOptions: Option[] = allSkills
-  .filter((s) => s.enabled)
-  .map((s) => ({ kind: "skill" as const, id: s.id, departmentId: s.departmentId, label: s.name, color: departmentColors[s.departmentId], sub: s.subGroupId.split(".")[1].replace(/-/g, " "), icon: s.icon }));
+const skillOptions: (Option & { enabled: boolean })[] = allSkills.map((s) => ({ kind: "skill" as const, id: s.id, departmentId: s.departmentId, label: s.name, color: departmentColors[s.departmentId], sub: s.subGroupId.split(".")[1].replace(/-/g, " "), icon: s.icon, enabled: s.enabled }));
 
 interface Props {
   placeholder?: string;
@@ -39,6 +37,8 @@ export function Composer({ placeholder = "Ask anything, or type / for an agent o
   const [idx, setIdx] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
   const custom = useStore((s) => s.customSkills);
+  const overrides = useStore((s) => s.skillEnabled);
+  const list = useRef<HTMLDivElement>(null);
 
   const slash = /(?:^|\s)\/([\w-]*)$/.exec(text);
   const query = slash?.[1]?.toLowerCase() ?? "";
@@ -46,10 +46,17 @@ export function Composer({ placeholder = "Ask anything, or type / for an agent o
     if (!slash) return [];
     const a = agentOptions.filter((o) => o.label.toLowerCase().includes(query));
     const customOpts: Option[] = custom.map((c) => ({ kind: "skill", id: c.id, departmentId: c.departmentId, label: c.name, color: departmentColors[c.departmentId], sub: "your skill", icon: c.icon }));
-    const s = [...customOpts, ...skillOptions].filter((o) => o.label.toLowerCase().includes(query)).slice(0, query ? 8 : 5);
+    // every skill that is switched on, built-in or your own
+    const builtIn = skillOptions.filter((o) => overrides[o.id] ?? o.enabled);
+    const s = [...customOpts, ...builtIn].filter((o) => o.label.toLowerCase().includes(query));
     return [...a, ...s];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, !!slash, custom]);
+  }, [query, !!slash, custom, overrides]);
+
+  // keep the highlighted row visible while moving with the arrow keys
+  useEffect(() => {
+    list.current?.querySelector(`[data-idx="${idx}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [idx]);
 
   const pick = (o: Option) => {
     setTarget(o.kind === "agent" ? { kind: "agent", id: o.id, label: o.label, color: o.color } : { kind: "skill", id: o.id, departmentId: o.departmentId, label: o.label, color: o.color });
@@ -73,14 +80,16 @@ export function Composer({ placeholder = "Ask anything, or type / for an agent o
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.14 }}
-            className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-80 overflow-y-auto rounded-2xl glass-strong p-1.5 shadow-2xl shadow-black/50"
+            ref={list}
+            className="absolute bottom-full left-0 right-0 z-[80] mb-2 max-h-[min(420px,55vh)] overflow-y-auto overscroll-contain rounded-2xl glass-strong p-1.5 shadow-2xl shadow-black/50"
           >
             {options.map((o, i) => {
               const header = i === 0 && o.kind === "agent" ? "Agents" : (i === 0 || options[i - 1].kind === "agent") && o.kind === "skill" ? "Skills" : null;
               return (
                 <div key={o.kind + o.id}>
-                  {header && <div className="px-3 pb-1 pt-2 text-[10px] uppercase tracking-[0.18em] text-faint">{header}</div>}
+                  {header && <div className="sticky -top-1.5 z-10 bg-glass-strong px-3 pb-1 pt-2 text-[10px] uppercase tracking-[0.18em] text-faint">{header}</div>}
                   <button
+                    data-idx={i}
                     onMouseEnter={() => setIdx(i)}
                     onMouseDown={(e) => {
                       e.preventDefault();

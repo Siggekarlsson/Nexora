@@ -9,7 +9,6 @@ import { Popover } from "@/components/ui/Popover";
 
 const SUPPORTED = ["pdf", "docx", "xlsx", "txt", "eml", "md"] as const;
 type Ext = (typeof SUPPORTED)[number];
-const BASE_USED = 14 * 1024 * 1024;
 const QUOTA = 1024 * 1024 * 1024;
 
 const typeMeta: Record<Ext, { color: string; icon: typeof FileText }> = {
@@ -38,19 +37,23 @@ export function FilesPage() {
   const [rejected, setRejected] = useState<string[]>([]);
   const input = useRef<HTMLInputElement>(null);
 
-  const used = BASE_USED + files.reduce((n, f) => n + f.sizeBytes, 0);
+  const used = files.reduce((n, f) => n + f.sizeBytes, 0);
   const visible = useMemo(() => files.filter((f) => (!type || f.type === type) && (!q || f.name.toLowerCase().includes(q.toLowerCase()))), [files, q, type]);
 
-  const add = (list: FileList | null) => {
+  const add = async (list: FileList | null) => {
     if (!list) return;
     const ok: FileItem[] = [];
     const bad: string[] = [];
-    Array.from(list).forEach((f) => {
+    for (const f of Array.from(list)) {
       const ext = f.name.split(".").pop()?.toLowerCase() as Ext;
-      if (!SUPPORTED.includes(ext)) return bad.push(f.name);
-      // Metadata only for now; later: upload to Supabase Storage + embed into the brain.
-      ok.push({ id: uid(), name: f.name, type: ext, sizeBytes: f.size, uploadedAt: new Date().toISOString() });
-    });
+      if (!SUPPORTED.includes(ext)) {
+        bad.push(f.name);
+        continue;
+      }
+      // Plain-text formats are read so agents can use them; binary formats are stored as metadata for now.
+      const text = ["txt", "md", "eml"].includes(ext) ? (await f.text()).slice(0, 20000) : undefined;
+      ok.push({ id: uid(), name: f.name, type: ext, sizeBytes: f.size, uploadedAt: new Date().toISOString(), text });
+    }
     if (ok.length) setState((s) => ({ files: [...ok, ...s.files] }));
     setRejected(bad);
   };
@@ -76,7 +79,7 @@ export function FilesPage() {
           <h1 className="text-3xl font-semibold tracking-tight">Files</h1>
           <div className="mt-3 flex items-center gap-3 text-[13px] text-muted">
             <div className="h-1.5 w-48 overflow-hidden rounded-full bg-hover">
-              <motion.div className="h-full rounded-full bg-gradient-to-r from-[#7cc4ff] to-[#b98bff]" animate={{ width: `${Math.max(1.5, (used / QUOTA) * 100)}%` }} />
+              <motion.div className="h-full rounded-full bg-gradient-to-r from-[#7cc4ff] to-[#b98bff]" animate={{ width: `${used ? Math.max(1.5, (used / QUOTA) * 100) : 0}%` }} />
             </div>
             {fmt(used)} of 1 GB used
           </div>

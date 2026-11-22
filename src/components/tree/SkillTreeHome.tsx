@@ -74,21 +74,30 @@ export function SkillTreeHome() {
 
   return (
     <div className="relative flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
-      {/* top controls */}
+      {/* top controls: stay visible in the department view too */}
       <AnimatePresence>
-        {!focus && (
+        {(
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-x-0 top-0 z-20 flex items-start justify-between px-6 pt-5"
+            className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between px-6 pt-5 [&>*]:pointer-events-auto"
           >
             <GettingStarted />
             <div className="flex gap-2">
               <Link href="/skills/new" className="btn btn-glass">
                 <Wand2 size={15} strokeWidth={1.8} /> New Skill
               </Link>
-              <button onClick={() => setEditing((e) => !e)} className={`btn ${editing ? "btn-cta" : "btn-glass"}`}>
+              <button
+                onClick={() => {
+                  if (focus) {
+                    openDept(null);
+                    return setEditing(true);
+                  }
+                  setEditing((e) => !e);
+                }}
+                className={`btn ${editing ? "btn-cta" : "btn-glass"}`}
+              >
                 {editing ? <Check size={15} /> : <Pencil size={15} strokeWidth={1.8} />}
                 {editing ? "Done" : "Edit Tree"}
               </button>
@@ -149,25 +158,26 @@ export function SkillTreeHome() {
           )}
         </AnimatePresence>
 
-      {/* bottom: recent + composer */}
+      {/* bottom: recent + composer, also visible in the department view.
+          Below xl it sits above the trial pill; from xl it is narrow enough to fit beside it. */}
       {(
           <motion.div
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: focus ? 0 : 1, y: focus ? 20 : 0 }}
-            transition={{ delay: focus ? 0 : 0.2 }}
-            style={{ pointerEvents: focus ? "none" : "auto" }}
-            className="relative z-20 mx-auto w-full max-w-[720px] px-4 pb-6"
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="relative z-40 mx-auto mb-16 w-full max-w-[720px] px-4 pb-6 xl:mb-0 xl:max-w-[min(720px,calc(100vw-720px))]"
           >
-            <div className="mb-3 flex items-center gap-2 overflow-x-auto">
-              <span className="mr-1 text-[11px] uppercase tracking-[0.18em] text-faint">Recent</span>
+            <div className="mb-3 flex min-w-0 items-center gap-2">
+              <span className="mr-1 shrink-0 text-[11px] uppercase tracking-[0.18em] text-faint">Recent</span>
               {threads.slice(0, 3).map((t) => (
                 <Link
                   key={t.id}
                   href={`/chat?thread=${t.id}`}
-                  className="flex shrink-0 items-center gap-2 rounded-full glass px-3 py-1.5 text-xs text-muted transition-colors hover:text-fg"
+                  title={`${departmentName(t.departmentId)} · ${t.title}`}
+                  className="flex min-w-0 max-w-[230px] shrink items-center gap-2 rounded-full glass px-3 py-1.5 text-xs text-muted transition-colors hover:text-fg"
                 >
-                  <PixelAvatar id={t.departmentId} color={departmentColors[t.departmentId]} size={13} />
-                  <span className="max-w-[200px] truncate">{departmentName(t.departmentId)} · {t.title}</span>
+                  <span className="shrink-0"><PixelAvatar id={t.departmentId} color={departmentColors[t.departmentId]} size={13} /></span>
+                  <span className="min-w-0 truncate">{departmentName(t.departmentId)} · {t.title}</span>
                 </Link>
               ))}
             </div>

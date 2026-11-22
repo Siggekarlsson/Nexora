@@ -7,7 +7,7 @@ import { PixelAvatar } from "@/components/brand/PixelAvatar";
 import { brain } from "@/data/departments";
 import { Markdown } from "@/components/chat/Markdown";
 import { Popover } from "@/components/ui/Popover";
-import { getState } from "@/lib/store";
+import { agentContext } from "@/lib/store";
 
 type Msg = { role: "user" | "assistant"; content: string };
 const starters = ["What needs me first today?", "Why is cost per lead going up?", "Summarise this week across all dashboards"];
@@ -31,8 +31,8 @@ export function BrainPanel() {
     if (lower.includes("first") || lower.includes("needs me")) {
       content = "### 4 things need you\n- **Paid Ads:** cost per lead up 7.7%, review the webinar campaign\n- **Pipeline:** 3 deals stale for 14 days, ask Sales for next steps\n- **Finance:** 2 invoices over 30 days overdue, approve reminders\n- **Content:** Monday's newsletter isn't scheduled\n\nStart with Finance, it's the only one with cash at stake.";
     } else {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "brain", docCount: getState().files.length, messages: next }) });
-      content = (await res.json()).content;
+      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agent: "brain", ...agentContext(), messages: next }) });
+      content = (await res.json().catch(() => null))?.content ?? "Company Brain couldn't answer right now.";
     }
     setMsgs((m) => [...m, { role: "assistant", content }]);
     setBusy(false);
@@ -87,7 +87,7 @@ export function BrainPanel() {
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="m-3 flex items-center gap-2 rounded-2xl border border-line bg-hover py-1.5 pl-4 pr-1.5">
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask across every dashboard…" className="flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-faint" />
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask Company Brain about this tab" className="flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-faint" />
         <button type="button" onClick={() => setListening((l) => !l)} className={`icon-btn h-8 w-8 ${listening ? "text-[#ff6b8b]" : ""}`} aria-label="Voice input">
           <Mic size={16} className={listening ? "animate-pulse" : ""} />
         </button>

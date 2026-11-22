@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Copy, Download, MoreHorizontal, Pencil, Play, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { ChevronDown, Copy, Download, Pencil, Play, Plus, Search, Settings2, Trash2, Upload, X } from "lucide-react";
 import { allSkills, departments } from "@/data/tree";
 import { departmentColors, departmentName } from "@/data/departments";
 import type { DepartmentId, Skill } from "@/lib/types";
@@ -67,6 +67,13 @@ export function SkillsPage() {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          onClick={() => setDept(null)}
+          className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] transition ${dept === null ? "border-fg/30 bg-active text-fg" : "border-line text-muted hover:text-fg"}`}
+        >
+          All
+          <span className="text-faint">{skills.length}</span>
+        </button>
         {departments.map((d) => {
           const count = skills.filter((s) => s.departmentId === d.id).length;
           const active = dept === d.id;
@@ -85,7 +92,7 @@ export function SkillsPage() {
         })}
       </div>
 
-      <motion.div layout className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <motion.div layout className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
         <AnimatePresence mode="popLayout">
           {visible.map((s) => (
             <SkillCard key={s.id} skill={s} />
@@ -110,18 +117,22 @@ function SkillCard({ skill }: { skill: Skill }) {
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.18 }}
+      style={{ zIndex: menu ? 30 : undefined, position: "relative" }}
       className={`glass group flex flex-col rounded-2xl p-5 transition hover:border-fg/15 ${skill.enabled ? "" : "opacity-60"}`}
     >
       <div className="flex items-start justify-between">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: `${color}22`, color }}>
           <DynamicIcon name={skill.icon} size={18} />
         </span>
+        <label className="flex cursor-pointer items-center gap-2 text-[12px]">
+          <span className={skill.enabled ? "text-fg" : "text-muted"}>{skill.enabled ? "On" : "Off"}</span>
         <Toggle
           on={skill.enabled}
           color={color}
           label={`Turn ${skill.name} ${skill.enabled ? "off" : "on"}`}
           onChange={(v) => setState((s) => ({ skillEnabled: { ...s.skillEnabled, [skill.id]: v } }))}
         />
+        </label>
       </div>
       <div className="mt-4 text-[15px] font-medium">{skill.name}</div>
       <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-muted">{skill.description}</p>
@@ -130,8 +141,9 @@ function SkillCard({ skill }: { skill: Skill }) {
         {departmentName(skill.departmentId)}
         <span className="ml-auto rounded-full border border-line px-2 py-0.5 text-[11px]">{skill.owner}</span>
         <div className="relative">
-          <button onClick={() => setMenu((m) => !m)} className="icon-btn h-7 w-7" aria-label="Skill settings">
-            <MoreHorizontal size={15} />
+          <button onClick={() => setMenu((m) => !m)} className="flex h-7 items-center gap-0.5 rounded-lg border border-line px-1.5 text-muted transition hover:bg-hover hover:text-fg" aria-label="Skill settings">
+            <Settings2 size={13} />
+            <ChevronDown size={12} />
           </button>
           <Popover open={menu} onClose={() => setMenu(false)} className="w-44">
             <Link href={`/chat?skill=${encodeURIComponent(skill.id)}`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-muted hover:bg-hover hover:text-fg"><Play size={14} /> Run</Link>

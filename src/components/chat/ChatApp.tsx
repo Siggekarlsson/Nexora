@@ -8,7 +8,7 @@ import { PanelLeftClose, PanelLeftOpen, Plus, Sparkles, Wand2 } from "lucide-rea
 import type { ChatMessage, DepartmentId, Thread } from "@/lib/types";
 import { agentOrder, departmentColors, departmentName } from "@/data/departments";
 import { allSkills } from "@/data/tree";
-import { getState, setState, uid, useStore } from "@/lib/store";
+import { agentContext, getState, setState, uid, useStore } from "@/lib/store";
 import { routeMessage } from "@/lib/routing";
 import { PixelAvatar } from "@/components/brand/PixelAvatar";
 import { Composer, type ComposerTarget } from "./Composer";
@@ -32,7 +32,7 @@ async function askAgent(thread: Thread): Promise<string> {
     body: JSON.stringify({
       agent: thread.departmentId,
       skillName: skill?.name,
-      docCount: getState().files.length,
+      ...agentContext(),
       messages: thread.messages.map((m) => ({ role: m.role, content: m.content })),
     }),
   });

@@ -13,6 +13,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { Popover } from "@/components/ui/Popover";
 import { siteConfig } from "@/config/site";
 import { useUI } from "./Providers";
+import { setState, useStore } from "@/lib/store";
 
 const mainNav = [
   { href: "/", label: "Tree", icon: Network },
@@ -38,6 +39,7 @@ export function TopBar() {
   const [menu, setMenu] = useState<null | "notifications" | "feedback" | "account">(null);
   const close = () => setMenu(null);
   const toggle = (m: typeof menu) => setMenu((cur) => (cur === m ? null : m));
+  const unread = useStore((s) => s.notifications.length);
   const initials = siteConfig.user.firstName[0] + siteConfig.user.lastName[0];
 
   return (
@@ -68,6 +70,7 @@ export function TopBar() {
             <Tooltip label="Notifications">
               <button className="icon-btn" data-active={menu === "notifications"} onClick={() => toggle("notifications")} aria-label="Notifications">
                 <Bell size={17} strokeWidth={1.7} />
+                {unread > 0 && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#ff6b8b]" />}
               </button>
             </Tooltip>
             <Popover open={menu === "notifications"} onClose={close} className="w-80">
@@ -149,21 +152,24 @@ function ThemeToggle() {
   );
 }
 
-const notifications = [
-  { title: "Paid Ads needs you", body: "Cost per lead rose 7.7% this week.", time: "5 min ago", color: "#b98bff" },
-  { title: "Q3 preview drafted", body: "Research finished the Volvo Cars preview.", time: "1 h ago", color: "#7cc4ff" },
-  { title: "Invoice overdue", body: "Finance flagged 2 unpaid commissioned-research invoices.", time: "Yesterday", color: "#5fe08a" },
-];
-
 function NotificationsPanel() {
+  const notifications = useStore((s) => s.notifications);
   return (
     <div>
       <div className="flex items-center justify-between px-3 py-2">
         <span className="text-sm font-medium">Notifications</span>
-        <button className="text-xs text-muted hover:text-fg">Mark all read</button>
+        {notifications.length > 0 && (
+          <button onClick={() => setState(() => ({ notifications: [] }))} className="text-xs text-muted hover:text-fg">Mark all read</button>
+        )}
       </div>
+      {notifications.length === 0 && (
+        <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
+          <Bell size={22} strokeWidth={1.5} className="text-faint" />
+          <div className="text-[13px] text-muted">No notifications yet</div>
+        </div>
+      )}
       {notifications.map((n) => (
-        <div key={n.title} className="flex gap-3 rounded-xl px-3 py-2.5 hover:bg-hover">
+        <div key={n.id} className="flex gap-3 rounded-xl px-3 py-2.5 hover:bg-hover">
           <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: n.color }} />
           <div className="min-w-0">
             <div className="text-[13px] font-medium">{n.title}</div>

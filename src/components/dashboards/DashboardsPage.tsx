@@ -46,7 +46,7 @@ export function DashboardsPage() {
         </div>
       </div>
 
-      <div className="mt-5 grid min-h-0 flex-1 grid-cols-1 gap-5 pb-5 lg:grid-cols-[1fr_440px]">
+      <div className="mt-5 grid min-h-0 flex-1 grid-cols-1 gap-5 pb-5 md:grid-cols-[1fr_360px] lg:grid-cols-[1fr_440px]">
         <div className="min-h-0 overflow-y-auto pr-1">
           {mode === "Control Room" && (
             <>
@@ -54,7 +54,7 @@ export function DashboardsPage() {
               <p className="mt-1 text-[13px] text-muted">
                 {tab === "Overview" ? `${needs} things need you, across ${dashboards.length} dashboards` : `${list[0].needsYou} thing needs you`}
               </p>
-              <div className={`mt-5 grid gap-4 ${tab === "Overview" ? "md:grid-cols-2" : ""}`}>
+              <div className="mt-5 grid gap-4">
                 {list.map((d, i) => (
                   <DashCard key={d.id} d={d} big={tab !== "Overview"} index={i} />
                 ))}
@@ -64,7 +64,7 @@ export function DashboardsPage() {
           {mode === "Time and Money Saved" && <TimeSaved />}
           {mode === "Apps" && <Apps />}
         </div>
-        <div className="hidden min-h-0 lg:block">
+        <div className="hidden min-h-0 md:block">
           <BrainPanel />
         </div>
       </div>

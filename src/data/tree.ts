@@ -47,9 +47,9 @@ function build(): Department[] {
 
 export const departments: Department[] = build();
 
-/** Clockwise order around the radial map. Neighbours are used for paging in department view. */
+/** Clockwise order around the radial map, starting at the bottom (Research).  Neighbours are used for paging in department view. */
 export const radialOrder: Exclude<DepartmentId, "brain">[] = [
-  "research", "leadership", "operations", "customer", "marketing", "finance", "sales",
+  "research", "sales", "marketing", "operations", "customer", "finance", "leadership",
 ];
 
 export function getDepartment(id: DepartmentId) {
