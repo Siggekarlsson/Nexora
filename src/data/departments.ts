@@ -14,7 +14,7 @@ export const departmentColors: Record<DepartmentId, string> = {
 
 type DeptSeed = Omit<Department, "subGroups">;
 
-// Mock data for an equity research house. Sub-groups & skills get filled in step 2–3.
+// Mock data for an equity research house.
 export const departmentSeeds: DeptSeed[] = [
   { id: "research", name: "Research", tagline: ["company coverage", "peers", "events"], color: departmentColors.research, avatar: "research", jobs: 7, readyToRun: 1 },
   { id: "sales", name: "Sales", tagline: ["investor outreach", "calls", "pipeline"], color: departmentColors.sales, avatar: "sales", jobs: 22, readyToRun: 10 },

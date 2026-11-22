@@ -5,10 +5,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { siteConfig } from "@/config/site";
+import { usePathname } from "next/navigation";
+import { useStore } from "@/lib/store";
 
 export function TrialPill() {
   const [collapsed, setCollapsed] = useState(false);
-  if (siteConfig.trial.started) return null;
+  const started = useStore((s) => s.trialStarted);
+  const path = usePathname();
+  if (started || path.startsWith("/chat") || path === "/ready") return null;
   return (
     <motion.div layout className="fixed bottom-5 left-5 z-40 flex items-center gap-2 rounded-full glass p-1.5 pl-4 shadow-xl shadow-black/30">
       <AnimatePresence initial={false} mode="popLayout">

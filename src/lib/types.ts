@@ -64,6 +64,8 @@ export interface Thread {
   skillId?: string;
   updatedAt: string;
   messages: ChatMessage[];
+  /** true when the router picked the agent */
+  autoRouted?: boolean;
 }
 
 export interface FileItem {

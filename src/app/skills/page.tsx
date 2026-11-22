@@ -1,5 +1,5 @@
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { SkillsPage } from "@/components/skills/SkillsPage";
 
 export default function Page() {
-  return <PagePlaceholder title="Skills" subtitle="Everything your brain can do." step={4} />;
+  return <SkillsPage />;
 }

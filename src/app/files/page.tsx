@@ -1,5 +1,5 @@
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { FilesPage } from "@/components/files/FilesPage";
 
 export default function Page() {
-  return <PagePlaceholder title="Files" subtitle="Teach your assistant by uploading documents." step={4} />;
+  return <FilesPage />;
 }

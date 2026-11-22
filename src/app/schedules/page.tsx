@@ -1,5 +1,6 @@
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+
+import { SchedulesPage } from "@/components/pages/SchedulesPage";
 
 export default function Page() {
-  return <PagePlaceholder title="Schedules" subtitle="Jobs that run on a schedule." step={5} />;
+  return <SchedulesPage />;
 }

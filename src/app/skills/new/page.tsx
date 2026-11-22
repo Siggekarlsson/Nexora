@@ -1,5 +1,10 @@
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { Suspense } from "react";
+import { NewSkillPage } from "@/components/pages/NewSkillPage";
 
 export default function Page() {
-  return <PagePlaceholder title="New Skill" subtitle="Create a new skill for a department." step={5} />;
+  return (
+    <Suspense>
+      <NewSkillPage />
+    </Suspense>
+  );
 }
