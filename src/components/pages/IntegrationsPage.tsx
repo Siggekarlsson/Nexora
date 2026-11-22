@@ -22,7 +22,7 @@ const apps: { id: string; name: string; desc: string; mono: string; color: strin
 
 type LiveId = "gmail" | "drive" | "shopify";
 type Live = { configured: boolean; connected: boolean; account: string | null };
-type Status = Record<LiveId, Live>;
+type Status = Record<LiveId, Live> & { via?: "composio" | "oauth" };
 const LIVE = new Set<string>(LIVE_INTEGRATIONS);
 
 const messages: Record<string, string> = {
@@ -77,7 +77,7 @@ export function IntegrationsPage() {
       await load();
       return setBusy(null);
     }
-    if (id === "shopify") return setShopInput("");
+    if (id === "shopify" && live?.via !== "composio") return setShopInput("");
     setBusy(id);
     window.location.href = `/api/integrations/${id}/connect`;
   };
@@ -119,7 +119,7 @@ export function IntegrationsPage() {
               <div className="mt-4 text-[15px] font-medium">{a.name}</div>
               <p className="mt-1 text-[13px] leading-5 text-muted">{a.desc}</p>
               {st?.account && <p className="mt-2 truncate text-[12px] text-[#5fe08a]">{st.account}</p>}
-              {needsSetup && <p className="mt-2 text-[12px] text-faint">Needs {a.id === "shopify" ? "Shopify" : "Google"} keys on the server before it can be connected.</p>}
+              {needsSetup && <p className="mt-2 text-[12px] text-faint">Needs a Composio key on the server before it can be connected.</p>}
               {a.id === "shopify" && shopInput !== null && !on && !needsSetup && (
                 <form
                   className="mt-3 flex gap-2"
@@ -221,15 +221,26 @@ function SetupModal({ kind, onClose }: { kind: "google" | "shopify" | null; onCl
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">{kind === "google" ? "Set up Gmail and Google Drive" : "Set up Shopify"}</h2>
-                <p className="mt-1 text-[13px] text-muted">
-                  {kind === "google"
-                    ? "Gmail and Google Drive share one Google OAuth client. Do this once, then both can be connected."
-                    : "Nexora needs its own Shopify app before a store can be connected."}
-                </p>
+                <p className="mt-1 text-[13px] text-muted">The easiest way is Composio: one key on the server, then Gmail, Google Drive and Shopify can all be connected.</p>
               </div>
               <button onClick={onClose} className="icon-btn" aria-label="Close"><X size={16} /></button>
             </div>
 
+            <ol className="mt-5 space-y-3.5">
+              <li className={step}><span className={num}>1</span><span>Create a free account at <a className="text-[#7cc4ff] hover:underline" href="https://dashboard.composio.dev" target="_blank" rel="noopener noreferrer">dashboard.composio.dev</a>. Composio handles the Google and Shopify sign-in, so you don&apos;t need your own Google or Shopify app.</span></li>
+              <li className={step}><span className={num}>2</span><span>Go to <b>Settings → API Keys</b> and copy your API key.</span></li>
+              <li className={step}>
+                <span className={num}>3</span>
+                <div className="min-w-0 flex-1">
+                  In <b>Vercel → Project → Settings → Environment Variables</b>, add <code>COMPOSIO_API_KEY</code> and <code>APP_URL</code> (your fixed address, e.g. {host}). Then <b>Redeploy</b>.
+                  <CopyField value={`APP_URL=${origin}`} />
+                </div>
+              </li>
+              <li className={step}><span className={num}>4</span><span>Back here, click <b>Connect</b> on Gmail, Google Drive or Shopify and sign in.</span></li>
+            </ol>
+
+            <details className="mt-6 rounded-xl border border-line px-4 py-3">
+              <summary className="cursor-pointer text-[13px] text-muted">Advanced: use your own {kind === "google" ? "Google" : "Shopify"} app instead</summary>
             {kind === "google" ? (
               <ol className="mt-5 space-y-3.5">
                 <li className={step}><span className={num}>1</span><span>Go to <a className="text-[#7cc4ff] hover:underline" href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer">console.cloud.google.com</a> and create a project, for example &quot;Nexora&quot;.</span></li>
@@ -275,6 +286,7 @@ function SetupModal({ kind, onClose }: { kind: "google" | "shopify" | null; onCl
                 <li className={step}><span className={num}>6</span><span>Back here, click <b>Connect</b> on Shopify and enter <code>your-store.myshopify.com</code>.</span></li>
               </ol>
             )}
+            </details>
             <p className="mt-5 text-[12px] text-faint">Never paste keys or secrets into a chat. They only belong in Vercel.</p>
           </motion.div>
         </motion.div>

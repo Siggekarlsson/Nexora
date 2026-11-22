@@ -22,7 +22,24 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Integrations
 
-Gmail, Google Drive and Shopify connect for real through OAuth. Tokens are stored encrypted in an httpOnly cookie per browser (`src/lib/integrations/vault.ts`). All other integrations are shown as "Coming soon". Without keys, the Integrations page shows a "How to set up" button with these steps and the exact redirect URIs for your site.
+Gmail, Google Drive and Shopify connect for real. All other integrations are shown as "Coming soon". Without keys, the Integrations page shows a "How to set up" button with the steps for your site.
+
+### Rekommenderat: Composio (en nyckel)
+
+[Composio](https://composio.dev) sköter inloggningen mot Google och Shopify med sina egna godkända appar, så du behöver ingen egen Google Cloud- eller Shopify-app (`src/lib/integrations/composio.ts`).
+
+1. Skapa ett gratis konto på [dashboard.composio.dev](https://dashboard.composio.dev).
+2. Gå till **Settings → API Keys** och kopiera nyckeln.
+3. I **Vercel → Project → Settings → Environment Variables**: lägg in `COMPOSIO_API_KEY` och `APP_URL=https://<din-sida>`. Gör sedan en **Redeploy**.
+4. Klicka **Connect** på Gmail, Google Drive eller Shopify i Nexora och logga in.
+
+Varje webbläsare får ett slumpat användar-id i en httpOnly-cookie (`nx_uid`), och Composio håller den användarens kopplingar. När `COMPOSIO_API_KEY` finns används Composio; annars används de egna OAuth-apparna nedan.
+
+When a chat message is about email, files/documents/reports or orders/products, the chat API reads the connected account (latest inbox messages, latest Drive files with the text of Google Docs and txt/md/csv files up to ~20,000 characters, or recent Shopify orders and products) and passes it to the AI as data, never as instructions.
+
+### Alternativ: egna OAuth-appar
+
+Tokens are stored encrypted in an httpOnly cookie per browser (`src/lib/integrations/vault.ts`).
 
 | Integration | Environment variables | Redirect URI |
 | --- | --- | --- |
@@ -30,9 +47,7 @@ Gmail, Google Drive and Shopify connect for real through OAuth. Tokens are store
 | Google Drive | same Google client as Gmail | `<APP_URL>/api/integrations/drive/callback` |
 | Shopify | `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `APP_URL` | `<APP_URL>/api/integrations/shopify/callback` |
 
-When a chat message is about email, files/documents/reports or orders/products, the chat API reads the connected account (latest inbox messages, latest Drive files with the text of Google Docs and txt/md/csv files up to ~20,000 characters, or recent Shopify orders) and passes it to the AI as data, never as instructions.
-
-### Google-nycklar (Gmail och Google Drive)
+#### Google-nycklar (Gmail och Google Drive)
 
 1. Gå till [console.cloud.google.com](https://console.cloud.google.com) och skapa ett projekt, t.ex. "Nexora".
 2. Gå till **APIs & Services → Library** och aktivera **Gmail API** och **Google Drive API**.
@@ -43,7 +58,7 @@ When a chat message is about email, files/documents/reports or orders/products, 
 5. Kopiera **Client ID** och **Client secret**.
 6. I **Vercel → Project → Settings → Environment Variables**: lägg in `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` och `APP_URL=https://<din-sida>` (din fasta adress, t.ex. `nexora-gilt-gamma.vercel.app`). Gör sedan en **Redeploy**.
 
-### Shopify
+#### Shopify
 
 1. Skapa ett gratis konto på [dev.shopify.com](https://dev.shopify.com) och en dev store om du saknar butik.
 2. Skapa en app. App URL: `https://<din-sida>`, redirect URL: `https://<din-sida>/api/integrations/shopify/callback`.
