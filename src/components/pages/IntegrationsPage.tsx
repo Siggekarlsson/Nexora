@@ -1,9 +1,9 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Check, Loader2, Search, Zap } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, Copy, Loader2, Search, Wrench, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
-import { setState, useStore } from "@/lib/store";
+import { LIVE_INTEGRATIONS, setState } from "@/lib/store";
 import { departmentColors } from "@/data/departments";
 import type { DepartmentId } from "@/lib/types";
 
@@ -12,7 +12,7 @@ const apps: { id: string; name: string; desc: string; mono: string; color: strin
   { id: "hubspot", name: "HubSpot", desc: "Contacts, deals and the commissioned-research pipeline.", mono: "Hs", color: "#ff7a59", dept: "sales", category: "CRM" },
   { id: "meta-ads", name: "Meta Ads", desc: "Campaign spend, leads and cost per lead for Paid Ads.", mono: "Ma", color: "#4f8cff", dept: "marketing", category: "Ads" },
   { id: "gmail", name: "Gmail", desc: "Let agents read your inbox and summarise client correspondence.", mono: "Gm", color: "#ea5f4f", dept: "operations", category: "Email" },
-  { id: "google-drive", name: "Google Drive", desc: "Sync reports, models and memos into the brain.", mono: "Gd", color: "#36b37e", dept: "brain", category: "Files" },
+  { id: "drive", name: "Google Drive", desc: "Let agents read your latest reports, models and memos.", mono: "Gd", color: "#36b37e", dept: "brain", category: "Files" },
   { id: "slack", name: "Slack", desc: "Talk to your agents and get alerts in channels.", mono: "Sl", color: "#b98bff", dept: "leadership", category: "Chat" },
   { id: "linkedin", name: "LinkedIn", desc: "Publish posts and read engagement on company pages.", mono: "Li", color: "#3b8fd9", dept: "marketing", category: "Social" },
   { id: "outlook", name: "Outlook", desc: "Mail and calendar for teams on Microsoft 365.", mono: "Ol", color: "#3d8bfd", dept: "operations", category: "Email" },
@@ -20,17 +20,23 @@ const apps: { id: string; name: string; desc: string; mono: string; color: strin
   { id: "newsletter", name: "Newsletter", desc: "Send research and track opens and reads.", mono: "Nl", color: "#ff9f4a", dept: "marketing", category: "Email" },
 ];
 
+type LiveId = "gmail" | "drive" | "shopify";
 type Live = { configured: boolean; connected: boolean; account: string | null };
-type Status = Record<"gmail" | "shopify", Live>;
-const LIVE = new Set(["gmail", "shopify"]);
+type Status = Record<LiveId, Live>;
+const LIVE = new Set<string>(LIVE_INTEGRATIONS);
 
 const messages: Record<string, string> = {
   "connected=gmail": "Gmail is connected. Ask an agent about your inbox in Chat.",
+  "connected=drive": "Google Drive is connected. Ask an agent about your files, reports or memos in Chat.",
   "connected=shopify": "Shopify is connected. Ask an agent about your orders or products in Chat.",
   "error=gmail_denied": "Gmail access was cancelled.",
   "error=gmail_failed": "Gmail could not be connected. Try again.",
   "error=gmail_state": "The Gmail sign-in expired. Try again.",
   "error=gmail_not_configured": "Gmail is not set up on the server yet.",
+  "error=drive_denied": "Google Drive access was cancelled.",
+  "error=drive_failed": "Google Drive could not be connected. Try again.",
+  "error=drive_state": "The Google Drive sign-in expired. Try again.",
+  "error=drive_not_configured": "Google Drive is not set up on the server yet.",
   "error=shopify_failed": "Shopify could not be connected. Try again.",
   "error=shopify_state": "The Shopify sign-in could not be verified. Try again.",
   "error=shopify_shop": "That store address does not look right. Use your-store.myshopify.com.",
@@ -38,19 +44,20 @@ const messages: Record<string, string> = {
 };
 
 export function IntegrationsPage() {
-  const connected = useStore((s) => s.integrations);
   const [busy, setBusy] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [live, setLive] = useState<Status | null>(null);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const [shopInput, setShopInput] = useState<string | null>(null);
+  const [setup, setSetup] = useState<"google" | "shopify" | null>(null);
 
   const load = () =>
     fetch("/api/integrations/status")
       .then((r) => r.json())
       .then((st: Status) => {
         setLive(st);
-        setState((s) => ({ integrations: { ...s.integrations, gmail: st.gmail.connected, shopify: st.shopify.connected } }));
+        // only real connections are stored; old simulated ones are dropped
+        setState(() => ({ integrations: { gmail: st.gmail.connected, drive: st.drive.connected, shopify: st.shopify.connected } }));
       })
       .catch(() => {});
 
@@ -63,16 +70,7 @@ export function IntegrationsPage() {
     }
   }, []);
 
-  const toggleDemo = (id: string) => {
-    if (connected[id]) return setState((s) => ({ integrations: { ...s.integrations, [id]: false } }));
-    setBusy(id);
-    setTimeout(() => {
-      setState((s) => ({ integrations: { ...s.integrations, [id]: true } }));
-      setBusy(null);
-    }, 1100);
-  };
-
-  const toggleLive = async (id: "gmail" | "shopify") => {
+  const toggleLive = async (id: LiveId) => {
     if (live?.[id].connected) {
       setBusy(id);
       await fetch("/api/integrations/disconnect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
@@ -81,11 +79,11 @@ export function IntegrationsPage() {
     }
     if (id === "shopify") return setShopInput("");
     setBusy(id);
-    window.location.href = "/api/integrations/gmail/connect";
+    window.location.href = `/api/integrations/${id}/connect`;
   };
 
   const list = apps.filter((a) => a.name.toLowerCase().includes(q.toLowerCase()));
-  const count = apps.filter((a) => connected[a.id]).length;
+  const count = live ? LIVE_INTEGRATIONS.filter((id) => live[id].connected).length : 0;
   return (
     <div className="mx-auto max-w-6xl px-8 pb-24 pt-10">
       <h1 className="text-3xl font-semibold tracking-tight">Integrations</h1>
@@ -102,18 +100,18 @@ export function IntegrationsPage() {
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {list.map((a, i) => {
           const isLive = LIVE.has(a.id);
-          const st = isLive ? live?.[a.id as "gmail" | "shopify"] : undefined;
-          const on = isLive ? !!st?.connected : !!connected[a.id];
-          const unavailable = isLive && live && !st?.configured;
+          const st = isLive ? live?.[a.id as LiveId] : undefined;
+          const on = !!st?.connected;
+          const needsSetup = isLive && !!live && !st?.configured;
           return (
-            <motion.div key={a.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className="glass flex flex-col rounded-2xl p-5">
+            <motion.div key={a.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className={`glass flex flex-col rounded-2xl p-5 ${isLive ? "" : "opacity-70"}`}>
               <div className="flex items-start justify-between">
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl text-[14px] font-semibold" style={{ background: `${a.color}22`, color: a.color }}>{a.mono}</span>
                 <div className="flex gap-1.5">
                   {isLive ? (
                     <span className="flex items-center gap-1 rounded-full bg-[#5fe08a]/15 px-2 py-0.5 text-[11px] text-[#5fe08a]"><Zap size={10} /> Live</span>
                   ) : (
-                    <span className="rounded-full bg-hover px-2 py-0.5 text-[11px] text-muted">Demo</span>
+                    <span className="rounded-full bg-hover px-2 py-0.5 text-[11px] text-muted">Coming soon</span>
                   )}
                   <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-muted">{a.category}</span>
                 </div>
@@ -121,8 +119,8 @@ export function IntegrationsPage() {
               <div className="mt-4 text-[15px] font-medium">{a.name}</div>
               <p className="mt-1 text-[13px] leading-5 text-muted">{a.desc}</p>
               {st?.account && <p className="mt-2 truncate text-[12px] text-[#5fe08a]">{st.account}</p>}
-              {unavailable && <p className="mt-2 text-[12px] text-faint">Needs setup on the server before it can be connected.</p>}
-              {a.id === "shopify" && shopInput !== null && !on && (
+              {needsSetup && <p className="mt-2 text-[12px] text-faint">Needs {a.id === "shopify" ? "Shopify" : "Google"} keys on the server before it can be connected.</p>}
+              {a.id === "shopify" && shopInput !== null && !on && !needsSetup && (
                 <form
                   className="mt-3 flex gap-2"
                   onSubmit={(e) => {
@@ -140,19 +138,147 @@ export function IntegrationsPage() {
                 <span className="flex items-center gap-1.5 text-xs text-muted">
                   <span className="h-2 w-2 rounded-full" style={{ background: departmentColors[a.dept] }} /> Used by {a.dept === "brain" ? "Company Brain" : a.dept[0].toUpperCase() + a.dept.slice(1)}
                 </span>
-                <button
-                  onClick={() => (isLive ? toggleLive(a.id as "gmail" | "shopify") : toggleDemo(a.id))}
-                  disabled={busy === a.id || !!unavailable || (isLive && !live)}
-                  className={`btn ml-auto h-8 px-3 text-xs disabled:opacity-50 ${on ? "btn-glass text-[#5fe08a]" : "btn-cta"}`}
-                >
-                  {busy === a.id ? <Loader2 size={13} className="animate-spin" /> : on ? <Check size={13} /> : null}
-                  {busy === a.id ? "Connecting" : on ? (isLive ? "Disconnect" : "Connected") : unavailable ? "Setup needed" : "Connect"}
-                </button>
+                {!isLive ? (
+                  <button disabled className="btn btn-glass ml-auto h-8 cursor-not-allowed px-3 text-xs opacity-60">Coming soon</button>
+                ) : needsSetup ? (
+                  <button onClick={() => setSetup(a.id === "shopify" ? "shopify" : "google")} className="btn btn-glass ml-auto h-8 px-3 text-xs">
+                    <Wrench size={13} /> How to set up
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => toggleLive(a.id as LiveId)}
+                    disabled={busy === a.id || !live}
+                    className={`btn ml-auto h-8 px-3 text-xs disabled:opacity-50 ${on ? "btn-glass text-[#5fe08a]" : "btn-cta"}`}
+                  >
+                    {busy === a.id ? <Loader2 size={13} className="animate-spin" /> : on ? <Check size={13} /> : null}
+                    {busy === a.id ? "Connecting" : on ? "Disconnect" : "Connect"}
+                  </button>
+                )}
               </div>
             </motion.div>
           );
         })}
       </div>
+      <SetupModal kind={setup} onClose={() => setSetup(null)} />
     </div>
+  );
+}
+
+function CopyField({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-line bg-hover px-3 py-2">
+      <code className="min-w-0 flex-1 truncate text-[12px]">{value}</code>
+      <button
+        onClick={() => {
+          navigator.clipboard?.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        }}
+        className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted hover:bg-active hover:text-fg"
+        aria-label={`Copy ${value}`}
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+function SetupModal({ kind, onClose }: { kind: "google" | "shopify" | null; onClose: () => void }) {
+  const [origin, setOrigin] = useState("https://your-site");
+  useEffect(() => setOrigin(window.location.origin), []);
+  useEffect(() => {
+    if (!kind) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [kind, onClose]);
+
+  const host = origin.replace(/^https?:\/\//, "");
+  const step = "flex gap-3 text-[13.5px] leading-6 text-fg/90";
+  const num = "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-active text-[11px] text-muted";
+
+  return (
+    <AnimatePresence>
+      {kind && (
+        <motion.div
+          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-[8vh] backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onMouseDown={onClose}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={kind === "google" ? "Set up Gmail and Google Drive" : "Set up Shopify"}
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            className="glass-strong w-[620px] max-w-full rounded-2xl p-6 shadow-2xl shadow-black/50"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">{kind === "google" ? "Set up Gmail and Google Drive" : "Set up Shopify"}</h2>
+                <p className="mt-1 text-[13px] text-muted">
+                  {kind === "google"
+                    ? "Gmail and Google Drive share one Google OAuth client. Do this once, then both can be connected."
+                    : "Nexora needs its own Shopify app before a store can be connected."}
+                </p>
+              </div>
+              <button onClick={onClose} className="icon-btn" aria-label="Close"><X size={16} /></button>
+            </div>
+
+            {kind === "google" ? (
+              <ol className="mt-5 space-y-3.5">
+                <li className={step}><span className={num}>1</span><span>Go to <a className="text-[#7cc4ff] hover:underline" href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer">console.cloud.google.com</a> and create a project, for example &quot;Nexora&quot;.</span></li>
+                <li className={step}><span className={num}>2</span><span>Go to <b>APIs &amp; Services → Library</b> and enable <b>Gmail API</b> and <b>Google Drive API</b>.</span></li>
+                <li className={step}><span className={num}>3</span><span>Go to <b>OAuth consent screen</b>: choose <b>External</b>, fill in the app name and email, and add your own Gmail as a <b>Test user</b>.</span></li>
+                <li className={step}>
+                  <span className={num}>4</span>
+                  <div className="min-w-0 flex-1">
+                    Go to <b>Credentials → Create credentials → OAuth client ID → Web application</b>. Add both redirect URIs under <b>Authorized redirect URIs</b>:
+                    <CopyField value={`${origin}/api/integrations/gmail/callback`} />
+                    <CopyField value={`${origin}/api/integrations/drive/callback`} />
+                  </div>
+                </li>
+                <li className={step}><span className={num}>5</span><span>Copy the <b>Client ID</b> and <b>Client secret</b>.</span></li>
+                <li className={step}>
+                  <span className={num}>6</span>
+                  <div className="min-w-0 flex-1">
+                    In <b>Vercel → Project → Settings → Environment Variables</b>, add <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> and <code>APP_URL</code> (your fixed address, e.g. {host}). Then <b>Redeploy</b>.
+                    <CopyField value={`APP_URL=${origin}`} />
+                  </div>
+                </li>
+              </ol>
+            ) : (
+              <ol className="mt-5 space-y-3.5">
+                <li className={step}><span className={num}>1</span><span>Go to <a className="text-[#7cc4ff] hover:underline" href="https://dev.shopify.com" target="_blank" rel="noopener noreferrer">dev.shopify.com</a> and create a free account. Create a dev store if you don&apos;t have a store.</span></li>
+                <li className={step}>
+                  <span className={num}>2</span>
+                  <div className="min-w-0 flex-1">
+                    Create a new <b>app</b>. Set the App URL and the redirect URL:
+                    <CopyField value={origin} />
+                    <CopyField value={`${origin}/api/integrations/shopify/callback`} />
+                  </div>
+                </li>
+                <li className={step}><span className={num}>3</span><span>Under access scopes, add <code>read_orders</code> and <code>read_products</code>. Release a version of the app.</span></li>
+                <li className={step}><span className={num}>4</span><span>Copy the <b>Client ID</b> and <b>Client secret</b>.</span></li>
+                <li className={step}>
+                  <span className={num}>5</span>
+                  <div className="min-w-0 flex-1">
+                    In <b>Vercel → Project → Settings → Environment Variables</b>, add <code>SHOPIFY_API_KEY</code> (Client ID), <code>SHOPIFY_API_SECRET</code> (Client secret) and <code>APP_URL</code>. Then <b>Redeploy</b>.
+                    <CopyField value={`APP_URL=${origin}`} />
+                  </div>
+                </li>
+                <li className={step}><span className={num}>6</span><span>Back here, click <b>Connect</b> on Shopify and enter <code>your-store.myshopify.com</code>.</span></li>
+              </ol>
+            )}
+            <p className="mt-5 text-[12px] text-faint">Never paste keys or secrets into a chat. They only belong in Vercel.</p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

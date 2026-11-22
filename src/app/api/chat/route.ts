@@ -60,13 +60,14 @@ export async function POST(req: NextRequest) {
   try {
     const p = provider();
     if (p !== "mock") {
-      const { context, gmail } = await integrationContext(req, last);
+      const { context, gmail, drive } = await integrationContext(req, last);
       const system =
         systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic" }) + context;
       const raw = p === "anthropic" ? await anthropic(system, messages) : await groq(system, messages);
       const content = stripEcho(raw, last);
       const res = NextResponse.json({ content, provider: p });
       if (gmail) writeConn(res, "gmail", gmail);
+      if (drive) writeConn(res, "drive", drive);
       return res;
     }
     await new Promise((r) => setTimeout(r, 700));
