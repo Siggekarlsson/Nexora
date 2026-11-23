@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <CosmicBackground />
           <TopBar />
-          <main className="relative pt-14 min-h-screen">{children}</main>
+          <main className="relative pt-14 min-h-screen has-[[data-onboarding]]:pt-0">{children}</main>
           <TrialPill />
         </Providers>
       </body>

@@ -5,7 +5,7 @@
  * Swap the implementation of `load`/`persist` for Supabase calls later — the hooks stay the same.
  */
 import { useSyncExternalStore } from "react";
-import type { FileItem, Skill, Thread } from "./types";
+import type { DepartmentId, FileItem, Skill, Thread } from "./types";
 import { threads as seedThreads } from "@/data/threads";
 import { siteConfig } from "@/config/site";
 
@@ -17,9 +17,25 @@ export interface AppState {
   trialStarted: boolean;
   integrations: Record<string, boolean>;
   schedules: Record<string, boolean>;
-  workspace: { company: string; about: string };
+  workspace: { company: string; about: string; website?: string };
   notifications: Notice[];
+  /** Answers from onboarding. */
+  profile: Profile;
+  onboarding: { done: boolean };
+  /** Company Brain brief and audit written during onboarding. */
+  brain: { brief: string; audit: string; facts: string[] };
+  /** Department names and skills generated for this company (null = the default tree). */
+  tree: TreeOverride | null;
 }
+
+export type Profile = { name: string; role: string; goals: string[]; apps: string[] };
+
+export type TreeOverride = Partial<
+  Record<
+    Exclude<DepartmentId, "brain">,
+    { name: string; tagline: string[]; groups: { name: string; skills: { name: string; description: string; icon?: string }[] }[] }
+  >
+>;
 
 export type Notice = { id: string; title: string; body: string; time: string; color: string };
 
@@ -46,6 +62,10 @@ const initial: AppState = {
     { id: "n2", title: "Q3 preview drafted", body: "Research finished the Volvo Cars preview.", time: "1 h ago", color: "#7cc4ff" },
     { id: "n3", title: "Invoice overdue", body: "Finance flagged 2 unpaid commissioned-research invoices.", time: "Yesterday", color: "#5fe08a" },
   ],
+  profile: { name: "", role: "", goals: [], apps: [] },
+  onboarding: { done: false },
+  brain: { brief: "", audit: "", facts: [] },
+  tree: null,
   workspace: {
     company: siteConfig.user.company,
     about: "Independent equity research on Nordic listed companies: commissioned research, investor events and distribution to institutional investors.",
@@ -107,6 +127,9 @@ export function agentContext() {
   return {
     company: s.workspace.company,
     about: s.workspace.about,
+    brief: s.brain.brief,
+    profile: s.profile,
+    departments: s.tree ? Object.fromEntries(Object.entries(s.tree).map(([id, d]) => [id, { name: d.name, tagline: d.tagline }])) : undefined,
     docCount: s.files.length,
     docs: s.files.map((f) => ({ name: f.name, text: f.text })),
   };

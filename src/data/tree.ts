@@ -63,3 +63,68 @@ export function neighbours(id: DepartmentId) {
 }
 
 export const allSkills: Skill[] = departments.flatMap((d) => d.subGroups.flatMap((g) => g.skills));
+
+/** Built-in skills by id. Kept in sync with `allSkills` when a company tree is applied. */
+export const skillById: Record<string, Skill> = Object.fromEntries(allSkills.map((s) => [s.id, s]));
+
+/** Snapshot of the default tree, so a removed override can be undone. */
+const original = {
+  seeds: departmentSeeds.map((s) => ({ name: s.name, tagline: [...s.tagline] })),
+  depts: departments.map((d) => ({ name: d.name, tagline: d.tagline, jobs: d.jobs, readyToRun: d.readyToRun, subGroups: d.subGroups })),
+};
+
+type OverrideDept = {
+  name: string;
+  tagline: string[];
+  groups: { name: string; skills: { name: string; description: string; icon?: string }[] }[];
+};
+
+const GROUP_ICONS = ["Sparkles", "FileText", "Mail", "BarChart3", "Users", "Target", "Calendar", "Search"];
+
+/**
+ * Replaces department names, taglines and skills with the ones written for this company during onboarding.
+ * The exported arrays and objects are mutated in place so every module that imported them sees the new tree.
+ * Pass null to go back to the default tree.
+ */
+export function applyTree(tree: Partial<Record<Exclude<DepartmentId, "brain">, OverrideDept>> | null) {
+  departments.forEach((d, i) => {
+    const seed = departmentSeeds[i];
+    const o = tree?.[d.id as Exclude<DepartmentId, "brain">];
+    if (!o || !o.groups?.length) {
+      Object.assign(seed, original.seeds[i]);
+      Object.assign(d, original.depts[i]);
+      return;
+    }
+    let n = 0;
+    const subGroups: SubGroup[] = o.groups.map((g, gi) => {
+      const gid = `${d.id}.${slug(g.name) || `group-${gi}`}`;
+      return {
+        id: gid,
+        departmentId: d.id,
+        name: g.name,
+        skills: g.skills.map((s, si): Skill => {
+          const readyToRun = si === 0 || n++ % 3 === 0;
+          return {
+            id: `${d.id}.${slug(s.name) || `skill-${gi}-${si}`}`,
+            departmentId: d.id,
+            subGroupId: gid,
+            name: s.name,
+            description: s.description || genDescription(s.name, g.name, o.name),
+            icon: s.icon || GROUP_ICONS[gi % GROUP_ICONS.length],
+            color: d.color,
+            enabled: readyToRun,
+            recommended: gi === 0 && si === 0,
+            readyToRun,
+            owner: "Your team",
+          };
+        }),
+      };
+    });
+    const skills = subGroups.flatMap((g) => g.skills);
+    Object.assign(seed, { name: o.name, tagline: o.tagline.slice(0, 3) });
+    Object.assign(d, { name: o.name, tagline: o.tagline.slice(0, 3), subGroups, jobs: skills.length, readyToRun: skills.filter((s) => s.readyToRun).length });
+  });
+  allSkills.splice(0, allSkills.length, ...departments.flatMap((d) => d.subGroups.flatMap((g) => g.skills)));
+  for (const k of Object.keys(skillById)) delete skillById[k];
+  allSkills.forEach((s) => (skillById[s.id] = s));
+}

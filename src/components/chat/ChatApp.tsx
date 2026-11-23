@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus, Sparkles, Wand2 } from "lucide-react";
 import type { ChatMessage, DepartmentId, Thread } from "@/lib/types";
 import { agentOrder, departmentColors, departmentName } from "@/data/departments";
-import { allSkills } from "@/data/tree";
+import { skillById as builtIn } from "@/data/tree";
 import { agentContext, getState, setState, uid, useStore } from "@/lib/store";
 import { routeMessage } from "@/lib/routing";
 import { PixelAvatar } from "@/components/brand/PixelAvatar";
@@ -21,7 +21,6 @@ const suggestions = [
   "Which documents mention pricing?",
 ];
 
-const builtIn = Object.fromEntries(allSkills.map((s) => [s.id, s]));
 const findSkill = (id?: string | null) => (id ? builtIn[id] ?? getState().customSkills.find((s) => s.id === id) : undefined);
 
 async function askAgent(thread: Thread): Promise<string> {

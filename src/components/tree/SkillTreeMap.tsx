@@ -3,7 +3,7 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DepartmentId, Skill } from "@/lib/types";
-import { departments, allSkills } from "@/data/tree";
+import { departments, skillById } from "@/data/tree";
 import { brain } from "@/data/departments";
 import { PixelSprite } from "@/components/brand/PixelSprite";
 import { HudRings } from "./HudRings";
@@ -24,9 +24,8 @@ interface Props {
 }
 
 const deptById = Object.fromEntries(departments.map((d) => [d.id, d]));
-const skillById = Object.fromEntries(allSkills.map((s) => [s.id, s]));
 // deterministic packet routes: a few per department
-const packets = departments.flatMap((d, di) =>
+const makePackets = () => departments.flatMap((d, di) =>
   [0].map((k) => {
     const g = d.subGroups[(di + k) % d.subGroups.length];
     const j = g.skills[(di * 3 + k) % g.skills.length];
@@ -40,6 +39,7 @@ export function SkillTreeMap({ mode, editing, focus, offsets, onOffsetsChange, o
   const svgRef = useRef<SVGSVGElement>(null);
   const docCount = useStore((st) => st.files).length;
   const wrapRef = useRef<HTMLDivElement>(null);
+  const packets = useMemo(makePackets, []);
   const layout = useMemo(() => (mode === "radial" ? radialLayout(departments) : lineLayout(departments)), [mode]);
   const [hoverDept, setHoverDept] = useState<DepartmentId | null>(null);
   const [hoverJob, setHoverJob] = useState<string | null>(null);

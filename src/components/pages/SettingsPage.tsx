@@ -2,7 +2,9 @@
 
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, RotateCcw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { restartOnboarding, WORK_APPS } from "@/lib/onboarding";
 import { siteConfig } from "@/config/site";
 import { Toggle } from "@/components/ui/Toggle";
 import { setState, useStore } from "@/lib/store";
@@ -17,8 +19,16 @@ export function SettingsPage() {
   const workspace = useStore((s) => s.workspace);
   const [ws, setWs] = useState(workspace);
   useEffect(() => setWs(workspace), [workspace]);
+  const profile = useStore((s) => s.profile);
+  const [pf, setPf] = useState({ name: profile.name, role: profile.role, goals: profile.goals.join(", ") });
+  useEffect(() => setPf({ name: profile.name, role: profile.role, goals: profile.goals.join(", ") }), [profile]);
+  const router = useRouter();
   const save = () => {
-    if (active === "Workspace") setState(() => ({ workspace: { company: ws.company.trim() || siteConfig.user.company, about: ws.about } }));
+    if (active === "Workspace") setState(() => ({ workspace: { company: ws.company.trim() || siteConfig.user.company, about: ws.about, website: ws.website?.trim() ?? "" } }));
+    if (active === "Profile")
+      setState((s) => ({
+        profile: { ...s.profile, name: pf.name.trim(), role: pf.role.trim(), goals: pf.goals.split(",").map((g) => g.trim()).filter(Boolean) },
+      }));
     setSaved(true);
     setTimeout(() => setSaved(false), 1600);
   };
@@ -35,15 +45,44 @@ export function SettingsPage() {
         <h2 className="text-lg font-semibold">{active}</h2>
         {active === "Profile" && (
           <div className="mt-5 grid grid-cols-2 gap-4">
-            <label className="text-[13px] text-muted">First name<input defaultValue={siteConfig.user.firstName} className={field} /></label>
+            <label className="text-[13px] text-muted">First name<input value={pf.name || ""} placeholder={siteConfig.user.firstName} onChange={(e) => setPf({ ...pf, name: e.target.value })} className={field} /></label>
             <label className="text-[13px] text-muted">Last name<input defaultValue={siteConfig.user.lastName} className={field} /></label>
             <label className="col-span-2 text-[13px] text-muted">Email<input defaultValue={siteConfig.user.email} className={field} /></label>
-            <label className="col-span-2 text-[13px] text-muted">Role<input defaultValue="Head of Research" className={field} /></label>
+            <label className="col-span-2 text-[13px] text-muted">Role<input value={pf.role} placeholder="Your role" onChange={(e) => setPf({ ...pf, role: e.target.value })} className={field} /></label>
+            <label className="col-span-2 text-[13px] text-muted">What your brain should take off your plate first<input value={pf.goals} placeholder="Separate with commas" onChange={(e) => setPf({ ...pf, goals: e.target.value })} className={field} /></label>
+            <div className="col-span-2 text-[13px] text-muted">
+              Apps your team uses
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {profile.apps.filter((a) => a !== "none").length ? (
+                  profile.apps.filter((a) => a !== "none").map((a) => (
+                    <span key={a} className="rounded-full border border-line bg-hover px-2.5 py-1 text-[12.5px] text-fg">{WORK_APPS.find((w) => w.id === a)?.name ?? a}</span>
+                  ))
+                ) : (
+                  <span className="text-[12.5px]">None picked</span>
+                )}
+              </div>
+            </div>
+            <div className="col-span-2 mt-2 flex items-center justify-between rounded-xl border border-line p-4">
+              <div>
+                <div className="text-[14px] text-fg">Restart onboarding</div>
+                <div className="text-[12.5px] text-muted">Answer the setup questions again and rebuild your tree. Your current answers are filled in.</div>
+              </div>
+              <button
+                onClick={() => {
+                  restartOnboarding();
+                  router.push("/onboarding");
+                }}
+                className="btn btn-glass"
+              >
+                <RotateCcw size={14} /> Restart onboarding
+              </button>
+            </div>
           </div>
         )}
         {active === "Workspace" && (
           <div className="mt-5 grid gap-4">
             <label className="text-[13px] text-muted">Company name<input value={ws.company} onChange={(e) => setWs({ ...ws, company: e.target.value })} className={field} /></label>
+            <label className="text-[13px] text-muted">Website<input value={ws.website ?? ""} placeholder="yourcompany.com" onChange={(e) => setWs({ ...ws, website: e.target.value })} className={field} /></label>
             <label className="text-[13px] text-muted">What does your company do?<textarea rows={3} value={ws.about} onChange={(e) => setWs({ ...ws, about: e.target.value })} className={field + " resize-none"} /></label>
             <label className="text-[13px] text-muted">Default language<select className={field} defaultValue="en"><option value="en">English</option><option value="sv">Svenska</option></select></label>
           </div>

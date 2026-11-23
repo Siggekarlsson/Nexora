@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { CalendarClock, Plus } from "lucide-react";
 import Link from "next/link";
-import { allSkills } from "@/data/tree";
+import { skillById as byId } from "@/data/tree";
 import { departmentColors, departmentName } from "@/data/departments";
 import { setState, useStore } from "@/lib/store";
 import { Toggle } from "@/components/ui/Toggle";
@@ -18,7 +18,6 @@ const schedules = [
   { id: "s6", skill: "leadership.weekly-priorities", when: "Fridays at 15:00", next: "Fri 15:00", last: "21 Nov · 5 priorities", on: true },
   { id: "s7", skill: "customer.churn-risk-alert", when: "Daily at 10:00", next: "Mon 10:00", last: "Sun 10:00 · no risks", on: false },
 ];
-const byId = Object.fromEntries(allSkills.map((s) => [s.id, s]));
 
 export function SchedulesPage() {
   const overrides = useStore((s) => s.schedules);

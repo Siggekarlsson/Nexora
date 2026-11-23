@@ -16,11 +16,11 @@ export type ComposerTarget =
 
 type Option = ComposerTarget & { sub: string; icon?: string };
 
-const agentOptions: Option[] = [
+const agentOptions = (): Option[] => [
   { kind: "agent", id: "brain", label: brain.name, color: brain.color, sub: "Searches every document" },
   ...departments.map((d) => ({ kind: "agent" as const, id: d.id, label: d.name, color: d.color, sub: d.tagline.join(" · ") })),
 ];
-const skillOptions: (Option & { enabled: boolean })[] = allSkills.map((s) => ({ kind: "skill" as const, id: s.id, departmentId: s.departmentId, label: s.name, color: departmentColors[s.departmentId], sub: s.subGroupId.split(".")[1].replace(/-/g, " "), icon: s.icon, enabled: s.enabled }));
+const skillOptions = (): (Option & { enabled: boolean })[] => allSkills.map((s) => ({ kind: "skill" as const, id: s.id, departmentId: s.departmentId, label: s.name, color: departmentColors[s.departmentId], sub: s.subGroupId.split(".")[1].replace(/-/g, " "), icon: s.icon, enabled: s.enabled }));
 
 interface Props {
   placeholder?: string;
@@ -44,10 +44,10 @@ export function Composer({ placeholder = "Ask anything, or type / for an agent o
   const query = slash?.[1]?.toLowerCase() ?? "";
   const options = useMemo(() => {
     if (!slash) return [];
-    const a = agentOptions.filter((o) => o.label.toLowerCase().includes(query));
+    const a = agentOptions().filter((o) => o.label.toLowerCase().includes(query));
     const customOpts: Option[] = custom.map((c) => ({ kind: "skill", id: c.id, departmentId: c.departmentId, label: c.name, color: departmentColors[c.departmentId], sub: "your skill", icon: c.icon }));
     // every skill that is switched on, built-in or your own
-    const builtIn = skillOptions.filter((o) => overrides[o.id] ?? o.enabled);
+    const builtIn = skillOptions().filter((o) => overrides[o.id] ?? o.enabled);
     const s = [...customOpts, ...builtIn].filter((o) => o.label.toLowerCase().includes(query));
     return [...a, ...s];
     // eslint-disable-next-line react-hooks/exhaustive-deps

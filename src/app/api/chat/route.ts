@@ -25,6 +25,9 @@ type Body = {
   company?: string;
   about?: string;
   docs?: { name: string; text?: string }[];
+  brief?: string;
+  profile?: { name?: string; role?: string; goals?: string[]; apps?: string[] };
+  departments?: Record<string, { name: string; tagline: string[] }>;
   messages: Msg[];
 };
 
@@ -72,7 +75,7 @@ export async function POST(req: NextRequest) {
             })
           : null;
       const system =
-        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic" }) +
+        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic", brief: body.brief, profile: body.profile, departments: body.departments }) +
         context +
         (agent?.prompt ?? "");
       const raw = p === "anthropic" ? await anthropic(system, messages, agent) : await groq(system, messages, agent);

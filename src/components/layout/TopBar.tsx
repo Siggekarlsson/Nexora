@@ -42,6 +42,7 @@ export function TopBar() {
   const unread = useStore((s) => s.notifications.length);
   const initials = siteConfig.user.firstName[0] + siteConfig.user.lastName[0];
 
+  if (pathname.startsWith("/onboarding")) return null;
   return (
     <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-line bg-bg/70 backdrop-blur-xl">
       <div className="relative flex h-full items-center px-4">
