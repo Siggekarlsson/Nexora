@@ -8,6 +8,7 @@ import { useSyncExternalStore } from "react";
 import type { DepartmentId, FileItem, Skill, Thread } from "./types";
 import { threads as seedThreads } from "@/data/threads";
 import { siteConfig } from "@/config/site";
+import { CONNECTABLE } from "@/data/integrations";
 
 export interface AppState {
   threads: Thread[];
@@ -28,7 +29,23 @@ export interface AppState {
   tree: TreeOverride | null;
 }
 
-export type Profile = { name: string; role: string; goals: string[]; apps: string[] };
+/** Who the user is and what their company does. Kept in one object so it can move to a database row later. */
+export type Profile = {
+  name: string;
+  role: string;
+  goals: string[];
+  apps: string[];
+  hasWebsite: boolean;
+  website: string;
+  companyName: string;
+  companyType: string;
+  whatWeDo: string;
+  howWeMakeMoney: string;
+};
+
+export const emptyProfile: Profile = {
+  name: "", role: "", goals: [], apps: [], hasWebsite: false, website: "", companyName: "", companyType: "", whatWeDo: "", howWeMakeMoney: "",
+};
 
 export type TreeOverride = Partial<
   Record<
@@ -42,7 +59,7 @@ export type Notice = { id: string; title: string; body: string; time: string; co
 const KEY = "nexora.state.v1";
 
 /** Integrations that connect for real. Everything else is "Coming soon" and can never be connected. */
-export const LIVE_INTEGRATIONS = ["gmail", "drive", "shopify", "hubspot", "meta-ads", "slack", "linkedin", "outlook", "accounting", "newsletter"] as const;
+export const LIVE_INTEGRATIONS = CONNECTABLE.map((a) => a.id);
 
 /** Drops old simulated connections (e.g. hubspot: true) saved by earlier versions. */
 function onlyLive(integrations: Record<string, boolean> = {}) {
@@ -62,7 +79,7 @@ const initial: AppState = {
     { id: "n2", title: "Q3 preview drafted", body: "Research finished the Volvo Cars preview.", time: "1 h ago", color: "#7cc4ff" },
     { id: "n3", title: "Invoice overdue", body: "Finance flagged 2 unpaid commissioned-research invoices.", time: "Yesterday", color: "#5fe08a" },
   ],
-  profile: { name: "", role: "", goals: [], apps: [] },
+  profile: emptyProfile,
   onboarding: { done: false },
   brain: { brief: "", audit: "", facts: [] },
   tree: null,
@@ -83,7 +100,7 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const saved = JSON.parse(raw);
-      state = { ...initial, ...saved, integrations: onlyLive(saved.integrations) };
+      state = { ...initial, ...saved, profile: { ...emptyProfile, ...saved.profile }, integrations: onlyLive(saved.integrations) };
     }
   } catch {}
 }
@@ -98,6 +115,13 @@ export function setState(fn: (s: AppState) => Partial<AppState>) {
   load();
   state = { ...state, ...fn(state) };
   persist();
+  listeners.forEach((l) => l());
+}
+
+/** Back to a brand-new user (used by Log out). */
+export function resetState() {
+  state = initial;
+  loaded = true;
   listeners.forEach((l) => l());
 }
 

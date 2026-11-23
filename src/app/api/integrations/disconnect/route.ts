@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   const { id } = (await req.json()) as { id: unknown };
   if (!isAppId(id)) return NextResponse.json({ ok: false }, { status: 400 });
   const res = NextResponse.json({ ok: true });
-  if (id === "gmail" || id === "drive" || id === "shopify") clearConn(res, id as IntegrationId);
+  if (id === "gmail" || id === "drive") clearConn(res, id as IntegrationId);
   const uid = readUid(req);
   if (viaComposio(id) && uid) {
     try {

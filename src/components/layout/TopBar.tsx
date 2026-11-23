@@ -14,6 +14,7 @@ import { Popover } from "@/components/ui/Popover";
 import { siteConfig } from "@/config/site";
 import { useUI } from "./Providers";
 import { setState, useStore } from "@/lib/store";
+import { logout } from "@/lib/logout";
 
 const mainNav = [
   { href: "/", label: "Tree", icon: Network },
@@ -126,7 +127,7 @@ export function TopBar() {
                 </Link>
               ))}
               <div className="my-1 h-px bg-line" />
-              <button className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted hover:bg-hover hover:text-fg">
+              <button onClick={() => { close(); void logout(); }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted hover:bg-hover hover:text-fg">
                 <LogOut size={15} /> Log out
               </button>
             </Popover>

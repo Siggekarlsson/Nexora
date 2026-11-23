@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { integrationContext } from "@/lib/integrations/context";
 import { writeConn } from "@/lib/integrations/vault";
 import type { DepartmentId } from "@/lib/types";
-import { systemPrompt } from "@/lib/agents";
+import { systemPrompt, type PromptContext } from "@/lib/agents";
 import { mockReply } from "@/lib/mockReply";
 import { agentTools, composioConfigured, describe, readUid, type FnTool } from "@/lib/integrations/composio";
 
@@ -26,7 +26,7 @@ type Body = {
   about?: string;
   docs?: { name: string; text?: string }[];
   brief?: string;
-  profile?: { name?: string; role?: string; goals?: string[]; apps?: string[] };
+  profile?: PromptContext["profile"];
   departments?: Record<string, { name: string; tagline: string[] }>;
   messages: Msg[];
 };

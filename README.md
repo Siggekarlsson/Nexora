@@ -22,7 +22,15 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Integrations
 
-Gmail, Google Drive and Shopify connect for real. All other integrations are shown as "Coming soon". Without keys, the Integrations page shows a "How to set up" button with the steps for your site.
+All apps on the Integrations page live in `src/data/integrations.ts` (id, name, description, category, Composio toolkit slug and fallback logo). Connect starts a Composio sign-in and sends the browser to the app's own login page (Google, Microsoft, Slack, Meta and so on), then back to `/integrations?connected=<app>`. Status and Disconnect come from Composio. A card only says "Connected" when Composio (or Nexora's own Google OAuth, when Composio is off) reports a live connection.
+
+Logos come from Composio first. If Composio has none, the card uses the Iconify icon from `src/data/logo-icons.json`, a bundled subset of the "logos" and "simple-icons" sets. If there is no icon either, it shows a neutral app icon. Rebuild that file with `scripts/build-logo-icons.mjs` when you add apps.
+
+### Apps that show "Setup needed"
+
+- **Base44**: Composio has no toolkit for it yet.
+- **Any app whose toolkit needs its own auth config**: Composio has no shared sign-in app for these, so you need to create an auth config with your own OAuth app in the Composio dashboard. Nexora picks these up from Composio's error when it creates a session, and the card then shows "Setup needed". The live list for this deployment is in `GET /api/integrations/status`: every app with `"setup": true`.
+- **Coming Soon** (greyed out, cannot be connected): Proton Mail, Google Forms, DocuSign, Amazon S3, iCloud Drive, Nextcloud, Obsidian, Evernote, Xero, Sage, PayPal, Expensify, Shopify, TikTok, WooCommerce, Zapier, PostgreSQL, Snowflake, n8n, Exa.
 
 ### Rekommenderat: Composio (en nyckel)
 
@@ -35,7 +43,7 @@ Shopify har ingen delad app hos Composio. Antingen använder du Nexoras egen Sho
 3. I **Vercel → Project → Settings → Environment Variables**: lägg in `COMPOSIO_API_KEY` och `APP_URL=https://<din-sida>`. Gör sedan en **Redeploy**.
 4. Klicka **Connect** på Gmail eller Google Drive i Nexora och logga in.
 
-Samma nyckel kopplar även HubSpot, Meta Ads, Slack, LinkedIn, Outlook, QuickBooks (kortet "Accounting export") och Mailchimp (kortet "Newsletter"). I chatten får agenterna Composios verktyg (`COMPOSIO_SEARCH_TOOLS` och `COMPOSIO_MULTI_EXECUTE_TOOL`) och kan läsa data från de appar som är kopplade. De kan inte skicka, posta, ändra eller radera något, eftersom sessionen stänger av verktyg märkta create, update och destructive. Om Composio saknar en färdig app för någon tjänst hoppas den över och kortet visar Coming soon.
+Samma nyckel kopplar alla appar på Integrations-sidan som har en Composio-toolkit. I chatten får agenterna Composios verktyg (`COMPOSIO_SEARCH_TOOLS` och `COMPOSIO_MULTI_EXECUTE_TOOL`) och kan läsa data från de appar som är kopplade. De kan inte skicka, posta, ändra eller radera något, eftersom sessionen stänger av verktyg märkta create, update och destructive. Om Composio saknar en färdig app för någon tjänst hoppas den över och kortet visar "Setup needed".
 
 Varje webbläsare får ett slumpat användar-id i en httpOnly-cookie (`nx_uid`), och Composio håller den användarens kopplingar. När `COMPOSIO_API_KEY` finns används Composio; annars används de egna OAuth-apparna nedan.
 

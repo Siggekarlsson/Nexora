@@ -6,18 +6,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "@/components/chat/Markdown";
 import { departmentColors } from "@/data/departments";
-import { finishOnboarding, GOALS, NONE_APP, ROLES, WORK_APPS } from "@/lib/onboarding";
+import { COMPANY_TYPES, companyTypeLabel, describeHints, finishOnboarding, helpOptions, NONE_APP, ROLES, WORK_APPS } from "@/lib/onboarding";
+import { AppLogo } from "@/components/ui/AppLogo";
+import { connectApp } from "@/lib/connect";
+import { DynamicIcon } from "@/components/ui/DynamicIcon";
 import { getState, setState, type TreeOverride } from "@/lib/store";
 import type { DepartmentId } from "@/lib/types";
 import {
-  AppBadge, BrainAvatar, ChoiceCard, ContinueButton, Glows, Header, LogoBadge, MiniTree, Question, RotatingLine, TextLink,
+  BrainAvatar, ChoiceCard, ContinueButton, Glows, Header, LogoBadge, MiniTree, Question, RotatingLine, TextLink,
 } from "./parts";
 
-type StepId = "website" | "company" | "name" | "role" | "goals" | "apps" | "connect" | "identify" | "building" | "ready";
-const STEP_OF: Record<StepId, number> = { website: 0, company: 0, name: 1, role: 1, goals: 1, apps: 1, connect: 2, identify: 3, building: 3, ready: 3 };
+type StepId = "website" | "company" | "type" | "describe" | "name" | "role" | "goals" | "apps" | "connect" | "identify" | "building" | "money" | "ready";
+const STEP_OF: Record<StepId, number> = { website: 0, company: 0, type: 0, describe: 0, goals: 1, name: 1, role: 1, apps: 1, connect: 2, identify: 3, building: 3, money: 3, ready: 3 };
 
 type Candidate = { label: string; name: string; website?: string };
-type BuildResult = { brief: string; audit: string; about: string; facts: string[]; departments: TreeOverride; source: string };
+type BuildResult = { brief: string; audit: string; about: string; howWeMakeMoney?: string; facts: string[]; departments: TreeOverride; source: string };
 
 type Draft = {
   step: StepId;
@@ -36,6 +39,11 @@ type Draft = {
   chosen: Candidate | null;
   answer: string;
   result: BuildResult | null;
+  /** Company type id from COMPANY_TYPES, or OTHER. */
+  companyType: string;
+  typeOther: string;
+  whatWeDo: string;
+  howWeMakeMoney: string;
 };
 
 const DRAFT_KEY = "nexora.onboarding.v1";
@@ -44,16 +52,18 @@ const OTHER = "__other";
 
 function initialDraft(): Draft {
   const s = getState();
-  const again = !!s.profile.name; // restarted: prefill earlier answers
+  const p = s.profile;
+  const again = !!p.name; // restarted: prefill earlier answers
+  const knownType = COMPANY_TYPES.some((t) => t.id === p.companyType);
   return {
     step: "website",
-    website: again ? s.workspace.website ?? "" : "",
-    company: again ? s.workspace.company : "",
+    website: again ? p.website : "",
+    company: again ? p.companyName : "",
     name: s.profile.name,
     role: s.profile.role && !ROLES.includes(s.profile.role) ? OTHER : s.profile.role,
     roleOther: s.profile.role && !ROLES.includes(s.profile.role) ? s.profile.role : "",
-    goals: s.profile.goals.filter((g) => GOALS.includes(g)),
-    goalOther: s.profile.goals.filter((g) => !GOALS.includes(g)).join(", "),
+    goals: s.profile.goals,
+    goalOther: "",
     apps: s.profile.apps,
     connectApp: "",
     connected: "",
@@ -62,6 +72,10 @@ function initialDraft(): Draft {
     chosen: null,
     answer: "",
     result: null,
+    companyType: again ? (knownType ? p.companyType : p.companyType ? OTHER : "") : "",
+    typeOther: again && !knownType ? p.companyType : "",
+    whatWeDo: again ? p.whatWeDo : "",
+    howWeMakeMoney: again ? p.howWeMakeMoney : "",
   };
 }
 
@@ -92,13 +106,13 @@ export function Onboarding() {
     const error = params.get("error");
     if (connected) {
       const app = WORK_APPS.find((a) => a.integration === connected);
-      draft = { ...draft, step: "identify", connected: connected };
+      draft = { ...draft, step: draft.noWebsite ? "building" : "identify", connected: connected };
       setNotice(`${app?.name ?? "App"} is connected. I'll use it once your brain is ready.`);
     } else if (error) {
       draft = { ...draft, step: "connect" };
       setNotice(error.endsWith("not_configured") ? "That app can't be connected yet. Pick another one or skip for now." : "The sign-in didn't finish. Try again, pick another app, or skip for now.");
     }
-    if (draft.step === "building" && draft.result) draft.step = "ready";
+    if (draft.step === "building" && draft.result) draft.step = draft.howWeMakeMoney || draft.result.howWeMakeMoney ? "ready" : "money";
     setD(draft);
     if (connected || error) router.replace("/onboarding");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,9 +124,7 @@ export function Onboarding() {
     try {
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d));
     } catch {}
-    const role = d.role === OTHER ? d.roleOther.trim() : d.role;
-    const goals = goalList(d);
-    setState(() => ({ profile: { name: d.name.trim(), role, goals, apps: d.apps } }));
+    setState(() => ({ profile: profileOf(d) }));
   }, [d]);
 
   const go = useCallback((step: StepId) => {
@@ -128,29 +140,57 @@ export function Onboarding() {
 
   // ---- step actions ----
   const canContinue: Partial<Record<StepId, boolean>> = {
-    website: looksLikeSite(d.website),
+    website: looksLikeSite(d.website) || !d.website.trim(),
     company: d.company.trim().length > 1,
+    type: d.companyType === OTHER ? d.typeOther.trim().length > 2 : !!d.companyType,
+    describe: d.whatWeDo.trim().length >= 30,
     name: d.name.trim().length > 0,
     role: d.role === OTHER ? d.roleOther.trim().length > 0 : !!d.role,
     goals: d.goals.length > 0 && (!d.goals.includes(OTHER) || d.goals.length > 1 || d.goalOther.trim().length > 0),
     apps: d.apps.length > 0,
   };
   const next: Partial<Record<StepId, () => void>> = {
-    website: () => { update({ candidates: null, chosen: null, noWebsite: false }); go("name"); },
-    company: () => { update({ candidates: null, chosen: null }); go("name"); },
+    website: () => {
+      if (!d.website.trim()) return noSite();
+      update({ candidates: null, chosen: null, noWebsite: false });
+      go("name");
+    },
+    company: () => { update({ candidates: null, chosen: null }); go("type"); },
+    type: () => go("describe"),
+    describe: () => go("goals"),
+    goals: () => go(d.noWebsite ? "name" : "apps"),
     name: () => go("role"),
-    role: () => go("goals"),
-    goals: () => go("apps"),
+    role: () => go(d.noWebsite ? "apps" : "goals"),
     apps: () => afterApps(),
   };
+  const back: Partial<Record<StepId, StepId>> = {
+    type: "company",
+    describe: "type",
+    goals: d.noWebsite ? "describe" : "role",
+    name: d.noWebsite ? "goals" : "website",
+    role: "name",
+    apps: d.noWebsite ? "role" : "goals",
+  };
+  function noSite() {
+    update({ website: "", noWebsite: true, candidates: null, chosen: null });
+    go("company");
+  }
+  /** After apps/connect: with a website we confirm which company it is; without one we start building. */
+  function afterConnect() {
+    if (d!.noWebsite) {
+      update({ answer: d!.whatWeDo, result: null, step: "building" });
+      setNotice(null);
+    } else go("identify");
+  }
   function afterApps() {
     const first = d!.apps.find((a) => a !== NONE_APP);
-    if (!first) return go("identify");
+    if (!first) return afterConnect();
     update({ connectApp: first });
     go("connect");
   }
 
   const primary = () => {
+    if (d.step === "money") return d.howWeMakeMoney.trim().length > 2 && go("ready");
     if (canContinue[d.step]) next[d.step]?.();
   };
 
@@ -171,7 +211,7 @@ export function Onboarding() {
               transition={{ duration: 0.28, ease: "easeOut" }}
               className="mx-auto flex min-h-full max-w-[760px] flex-col items-center justify-center gap-7 py-6"
             >
-              {stepIndex < 1 || d.step === "name" ? <LogoBadge /> : <BrainAvatar thinking={d.step === "building"} />}
+              {d.step === "website" || d.step === "company" || d.step === "name" ? <LogoBadge /> : <BrainAvatar thinking={d.step === "building"} />}
               {notice && (
                 <div className="flex items-center gap-2 rounded-full border border-line bg-fg/5 px-4 py-1.5 text-[13px] text-fg/85">
                   {d.connected && d.step !== "connect" ? <Check size={14} className="text-[#5fe08a]" /> : null}
@@ -189,6 +229,33 @@ export function Onboarding() {
                 <>
                   <Question title="What's your company called?" sub="Your team sees this name. I set up your brain from it while you answer a few questions." />
                   <Input value={d.company} onChange={(v) => update({ company: v })} placeholder="Your company name" autoFocus />
+                </>
+              )}
+              {d.step === "type" && (
+                <>
+                  <Question title={`What does ${d.company.trim() || "your company"} do?`} sub="Pick the closest one. It helps your brain understand your business." />
+                  <div className="grid w-full max-w-[620px] grid-cols-2 gap-2.5">
+                    {COMPANY_TYPES.map((t) => (
+                      <ChoiceCard key={t.id} selected={d.companyType === t.id} onClick={() => update({ companyType: t.id })}>
+                        <DynamicIcon name={t.icon} size={16} className="text-muted" /> {t.label}
+                      </ChoiceCard>
+                    ))}
+                    <ChoiceCard wide selected={d.companyType === OTHER} onClick={() => update({ companyType: OTHER })}>
+                      <PenLine size={15} className="text-muted" /> Something else
+                    </ChoiceCard>
+                    {d.companyType === OTHER && (
+                      <div className="col-span-2">
+                        <Input value={d.typeOther} onChange={(v) => update({ typeOther: v })} placeholder="Describe what your company does" autoFocus wide />
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              {d.step === "describe" && <DescribeStep d={d} update={update} />}
+              {d.step === "money" && (
+                <>
+                  <Question title={`How does ${d.company.trim() || "your company"} make money?`} sub="One or two sentences is enough, for example online sales, subscriptions, sponsors or client projects." />
+                  <Input value={d.howWeMakeMoney} onChange={(v) => update({ howWeMakeMoney: v })} placeholder="We make money by…" autoFocus />
                 </>
               )}
               {d.step === "name" && (
@@ -217,9 +284,9 @@ export function Onboarding() {
               )}
               {d.step === "goals" && (
                 <>
-                  <Question title="What should your brain take off your plate first?" sub="Pick as many as apply. I shape your brain around these." />
+                  <Question title="How should Nexora help you?" sub="Pick as many as apply." />
                   <div className="grid w-full max-w-[620px] grid-cols-2 gap-2.5">
-                    {GOALS.map((g) => (
+                    {helpOptions(d.companyType).map((g) => (
                       <ChoiceCard key={g} kind="check" selected={d.goals.includes(g)} onClick={() => update({ goals: toggle(d.goals, g) })}>{g}</ChoiceCard>
                     ))}
                     <ChoiceCard wide kind="check" selected={d.goals.includes(OTHER)} onClick={() => update({ goals: toggle(d.goals, OTHER) })}>
@@ -227,7 +294,7 @@ export function Onboarding() {
                     </ChoiceCard>
                     {d.goals.includes(OTHER) && (
                       <div className="col-span-2">
-                        <Input value={d.goalOther} onChange={(v) => update({ goalOther: v })} placeholder="What else should it take on?" autoFocus wide />
+                        <Input value={d.goalOther} onChange={(v) => update({ goalOther: v })} placeholder="What else should Nexora help with?" autoFocus wide />
                       </div>
                     )}
                   </div>
@@ -244,11 +311,11 @@ export function Onboarding() {
                         selected={d.apps.includes(a.id)}
                         onClick={() => update({ apps: toggle(d.apps.filter((x) => x !== NONE_APP), a.id) })}
                       >
-                        <AppBadge mono={a.mono} color={a.color} /> {a.name}
+                        <AppLogo id={a.integration} size={36} /> {a.name}
                       </ChoiceCard>
                     ))}
                     <ChoiceCard kind="check" selected={d.apps.includes(NONE_APP)} onClick={() => update({ apps: d.apps.includes(NONE_APP) ? [] : [NONE_APP] })}>
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-fg/5 text-muted">–</span> None of these
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-[#15151c] text-white/50">–</span> None of these
                     </ChoiceCard>
                   </div>
                 </>
@@ -275,7 +342,10 @@ export function Onboarding() {
                 <BuildingStep
                   d={d}
                   companyName={companyName}
-                  onDone={(result) => update({ result, step: "ready" })}
+                  onDone={(result) => {
+                    const money = d.howWeMakeMoney || result.howWeMakeMoney || "";
+                    update({ result, howWeMakeMoney: money, whatWeDo: d.whatWeDo || result.about || d.answer, step: money ? "ready" : "money" });
+                  }}
                 />
               )}
               {d.step === "ready" && d.result && <ReadyStep result={d.result} companyName={companyName} />}
@@ -288,26 +358,38 @@ export function Onboarding() {
           {d.step === "website" && (
             <>
               <ContinueButton enabled={!!canContinue.website} onClick={primary} />
-              <TextLink onClick={() => { update({ website: "" }); go("company"); }}>No Website? Use Your Company Name</TextLink>
+              <TextLink onClick={noSite}>No Website? Use Your Company Name</TextLink>
             </>
           )}
           {d.step === "company" && (
             <>
               <ContinueButton enabled={!!canContinue.company} onClick={primary} />
-              <TextLink onClick={() => go("website")}>Use Our Website Instead</TextLink>
+              <TextLink onClick={() => { update({ noWebsite: false }); go("website"); }}>Use Our Website Instead</TextLink>
+            </>
+          )}
+          {(d.step === "type" || d.step === "describe") && (
+            <>
+              <ContinueButton enabled={!!canContinue[d.step]} onClick={primary} />
+              <TextLink onClick={() => go(back[d.step]!)}>← Back</TextLink>
+            </>
+          )}
+          {d.step === "money" && (
+            <>
+              <ContinueButton enabled={d.howWeMakeMoney.trim().length > 2} onClick={() => go("ready")} />
+              <TextLink onClick={() => go("ready")}>Skip This Question</TextLink>
             </>
           )}
           {d.step === "name" && (
             <>
               <ContinueButton enabled={!!canContinue.name} onClick={primary} />
-              <TextLink onClick={() => go(d.website ? "website" : "company")}>← Back</TextLink>
+              <TextLink onClick={() => go(back.name!)}>← Back</TextLink>
             </>
           )}
           {(d.step === "role" || d.step === "goals" || d.step === "apps") && (
             <>
               <ContinueButton enabled={!!canContinue[d.step]} onClick={primary} />
               <div className="flex gap-6">
-                <TextLink onClick={() => go(d.step === "role" ? "name" : d.step === "goals" ? "role" : "goals")}>← Back</TextLink>
+                <TextLink onClick={() => go(back[d.step]!)}>← Back</TextLink>
                 <TextLink onClick={() => (d.step === "apps" ? afterApps() : next[d.step]!())}>Skip This Question</TextLink>
               </div>
             </>
@@ -315,7 +397,7 @@ export function Onboarding() {
           {d.step === "connect" && d.connectApp === "" && (
             <div className="flex gap-6 pt-14">
               <TextLink onClick={() => go("apps")}>← Back</TextLink>
-              <TextLink onClick={() => go("identify")}>Skip for Now</TextLink>
+              <TextLink onClick={afterConnect}>Skip for Now</TextLink>
             </div>
           )}
           {d.step === "connect" && d.connectApp !== "" && appInfo && (
@@ -323,13 +405,11 @@ export function Onboarding() {
               <ContinueButton
                 enabled
                 label={`Connect ${appInfo.name}`}
-                onClick={() => {
-                  window.location.href = `/api/integrations/${appInfo.integration}/connect?next=/onboarding`;
-                }}
+                onClick={() => connectApp(appInfo.integration, "/onboarding")}
               />
               <div className="flex gap-6">
                 <TextLink onClick={() => update({ connectApp: "" })}>Pick Another App</TextLink>
-                <TextLink onClick={() => go("identify")}>Skip for Now</TextLink>
+                <TextLink onClick={afterConnect}>Skip for Now</TextLink>
               </div>
             </>
           )}
@@ -427,7 +507,7 @@ function ConnectStep({ app, picking, onPick }: { app: (typeof WORK_APPS)[number]
         <div className="grid w-full max-w-[620px] grid-cols-2 gap-2.5">
           {WORK_APPS.map((a) => (
             <ChoiceCard key={a.id} selected={false} onClick={() => onPick(a.id)}>
-              <AppBadge mono={a.mono} color={a.color} /> {a.name}
+              <AppLogo id={a.integration} size={36} /> {a.name}
             </ChoiceCard>
           ))}
         </div>
@@ -438,7 +518,7 @@ function ConnectStep({ app, picking, onPick }: { app: (typeof WORK_APPS)[number]
     <>
       <Question title={`Connect ${app.name} so I can work on your real ${app.what}.`} sub="I read what you share and ask before I write anything. You can skip this." />
       <div className="glass flex w-full max-w-[440px] items-center gap-4 rounded-2xl p-5">
-        <AppBadge mono={app.mono} color={app.color} size={52} />
+        <AppLogo id={app.integration} size={52} />
         <div className="min-w-0">
           <div className="text-[16px] font-medium">{app.name}</div>
           <div className="mt-0.5 text-[13.5px] text-muted">{app.desc}</div>
@@ -582,7 +662,17 @@ function BuildingStep({ d, companyName, onDone }: { d: Draft; companyName: strin
     fetch("/api/onboarding/build", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ company: companyName, website, answer: d.answer, role, goals, apps: d.apps.filter((a) => a !== NONE_APP) }),
+      body: JSON.stringify({
+        company: companyName,
+        website,
+        answer: d.answer,
+        role,
+        goals,
+        apps: d.apps.filter((a) => a !== NONE_APP),
+        companyType: typeName(d),
+        whatWeDo: d.whatWeDo,
+        howWeMakeMoney: d.howWeMakeMoney,
+      }),
     })
       .then((r) => r.json())
       .then((r: BuildResult) => {
@@ -634,7 +724,7 @@ function BuildingStep({ d, companyName, onDone }: { d: Draft; companyName: strin
   return (
     <>
       <Question
-        title={wrapping ? "Wrapping up…" : d.noWebsite || !d.website ? "Setting up your brain…" : "Reading your website…"}
+        title={wrapping ? "Wrapping up…" : d.noWebsite || !d.website ? `Getting to know ${companyName || "your company"}…` : "Reading your website…"}
         sub={wrapping ? "I'm finishing up." : "I'm working from what you told me about your business."}
       />
       <div className="grid w-full max-w-[720px] grid-cols-1 items-center gap-8 md:grid-cols-[300px_1fr]">
@@ -741,6 +831,77 @@ function ReportModal({ result, company, onClose }: { result: BuildResult; compan
         )}
       </motion.div>
     </motion.div>
+  );
+}
+
+function typeName(d: Draft) {
+  return d.companyType === OTHER ? d.typeOther.trim() : d.companyType ? companyTypeLabel(d.companyType) : "";
+}
+
+/** The answers as the stored user profile. */
+function profileOf(d: Draft) {
+  const site = d.noWebsite ? "" : hostOf(d.chosen?.website || d.website);
+  return {
+    name: d.name.trim(),
+    role: d.role === OTHER ? d.roleOther.trim() : d.role,
+    goals: goalList(d),
+    apps: d.apps,
+    hasWebsite: !!site,
+    website: site,
+    companyName: d.chosen?.name || d.company.trim() || (site ? capitalise(site.split(".")[0]) : ""),
+    companyType: typeName(d),
+    whatWeDo: d.whatWeDo.trim() || (d.result?.about ?? "") || d.answer,
+    howWeMakeMoney: d.howWeMakeMoney.trim(),
+  };
+}
+
+function DescribeStep({ d, update }: { d: Draft; update: (p: Partial<Draft>) => void }) {
+  const { questions, placeholder } = describeHints(d.companyType);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const add = (q: string) => {
+    const text = d.whatWeDo.trimEnd();
+    update({ whatWeDo: `${text}${text ? "\n" : ""}${q} ` });
+    // Focus now so the next keystroke lands in the text box, then move the caret to the end once React has rendered.
+    ref.current?.focus();
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    });
+  };
+  const left = 30 - d.whatWeDo.trim().length;
+  return (
+    <>
+      <Question title="Let Company Brain get to know you" sub="The more detail, the better your brain gets. Write it like you'd explain it to a new colleague." />
+      <div className="w-full max-w-[620px]">
+        <div className="mb-2.5 flex flex-wrap gap-2">
+          {questions.map((q) => (
+            <button key={q} onClick={() => add(q)} className="rounded-full border border-line bg-fg/5 px-3 py-1.5 text-[12.5px] text-fg/80 transition hover:border-fg/30 hover:text-fg">
+              + {q}
+            </button>
+          ))}
+        </div>
+        <textarea
+          ref={ref}
+          data-own-enter="1"
+          value={d.whatWeDo}
+          onChange={(e) => update({ whatWeDo: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && d.whatWeDo.trim().length >= 30) {
+              e.preventDefault();
+              update({ step: "goals" });
+            }
+          }}
+          rows={7}
+          autoFocus
+          placeholder={placeholder}
+          className="glass w-full resize-none rounded-2xl px-5 py-4 text-[15px] leading-relaxed outline-none placeholder:text-faint focus:border-fg/35"
+        />
+        <div className="mt-1.5 text-right text-[12px] text-faint">{left > 0 ? `${left} more characters` : "Looks good"}</div>
+      </div>
+    </>
   );
 }
 

@@ -8,6 +8,7 @@ import { restartOnboarding, WORK_APPS } from "@/lib/onboarding";
 import { siteConfig } from "@/config/site";
 import { Toggle } from "@/components/ui/Toggle";
 import { setState, useStore } from "@/lib/store";
+import { AppLogo } from "@/components/ui/AppLogo";
 
 const sections = ["Profile", "Workspace", "Appearance", "Notifications", "Data & privacy"] as const;
 
@@ -17,14 +18,37 @@ export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const [notif, setNotif] = useState({ needsYou: true, digest: true, runs: false, product: false });
   const workspace = useStore((s) => s.workspace);
-  const [ws, setWs] = useState(workspace);
-  useEffect(() => setWs(workspace), [workspace]);
+  const brief = useStore((s) => s.brain.brief);
+  const prof = useStore((s) => s.profile);
+  const wsOf = () => ({
+    company: prof.companyName || workspace.company,
+    website: prof.website || workspace.website || "",
+    companyType: prof.companyType,
+    whatWeDo: prof.whatWeDo || workspace.about,
+    howWeMakeMoney: prof.howWeMakeMoney,
+    brief,
+  });
+  const [ws, setWs] = useState(wsOf);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setWs(wsOf()), [workspace, prof, brief]);
+  useEffect(() => {
+    const want = new URLSearchParams(window.location.search).get("section");
+    const hit = sections.find((x) => x === want);
+    if (hit) setActive(hit);
+  }, []);
   const profile = useStore((s) => s.profile);
   const [pf, setPf] = useState({ name: profile.name, role: profile.role, goals: profile.goals.join(", ") });
   useEffect(() => setPf({ name: profile.name, role: profile.role, goals: profile.goals.join(", ") }), [profile]);
   const router = useRouter();
   const save = () => {
-    if (active === "Workspace") setState(() => ({ workspace: { company: ws.company.trim() || siteConfig.user.company, about: ws.about, website: ws.website?.trim() ?? "" } }));
+    if (active === "Workspace") {
+      const website = ws.website.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+      setState((s) => ({
+        workspace: { company: ws.company.trim() || siteConfig.user.company, about: ws.whatWeDo.trim().split(/\n/)[0].slice(0, 300), website },
+        profile: { ...s.profile, companyName: ws.company.trim(), website, hasWebsite: !!website, companyType: ws.companyType.trim(), whatWeDo: ws.whatWeDo.trim(), howWeMakeMoney: ws.howWeMakeMoney.trim() },
+        brain: { ...s.brain, brief: ws.brief },
+      }));
+    }
     if (active === "Profile")
       setState((s) => ({
         profile: { ...s.profile, name: pf.name.trim(), role: pf.role.trim(), goals: pf.goals.split(",").map((g) => g.trim()).filter(Boolean) },
@@ -49,13 +73,16 @@ export function SettingsPage() {
             <label className="text-[13px] text-muted">Last name<input defaultValue={siteConfig.user.lastName} className={field} /></label>
             <label className="col-span-2 text-[13px] text-muted">Email<input defaultValue={siteConfig.user.email} className={field} /></label>
             <label className="col-span-2 text-[13px] text-muted">Role<input value={pf.role} placeholder="Your role" onChange={(e) => setPf({ ...pf, role: e.target.value })} className={field} /></label>
-            <label className="col-span-2 text-[13px] text-muted">What your brain should take off your plate first<input value={pf.goals} placeholder="Separate with commas" onChange={(e) => setPf({ ...pf, goals: e.target.value })} className={field} /></label>
+            <label className="col-span-2 text-[13px] text-muted">How Nexora should help you<input value={pf.goals} placeholder="Separate with commas" onChange={(e) => setPf({ ...pf, goals: e.target.value })} className={field} /></label>
             <div className="col-span-2 text-[13px] text-muted">
               Apps your team uses
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {profile.apps.filter((a) => a !== "none").length ? (
                   profile.apps.filter((a) => a !== "none").map((a) => (
-                    <span key={a} className="rounded-full border border-line bg-hover px-2.5 py-1 text-[12.5px] text-fg">{WORK_APPS.find((w) => w.id === a)?.name ?? a}</span>
+                    <span key={a} className="flex items-center gap-2 rounded-full border border-line bg-hover py-1 pl-1 pr-3 text-[12.5px] text-fg">
+                      <AppLogo id={WORK_APPS.find((w) => w.id === a)?.integration ?? a} size={24} className="rounded-full !p-1" />
+                      {WORK_APPS.find((w) => w.id === a)?.name ?? a}
+                    </span>
                   ))
                 ) : (
                   <span className="text-[12.5px]">None picked</span>
@@ -80,10 +107,16 @@ export function SettingsPage() {
           </div>
         )}
         {active === "Workspace" && (
-          <div className="mt-5 grid gap-4">
+          <div className="mt-5 grid grid-cols-2 gap-4">
             <label className="text-[13px] text-muted">Company name<input value={ws.company} onChange={(e) => setWs({ ...ws, company: e.target.value })} className={field} /></label>
-            <label className="text-[13px] text-muted">Website<input value={ws.website ?? ""} placeholder="yourcompany.com" onChange={(e) => setWs({ ...ws, website: e.target.value })} className={field} /></label>
-            <label className="text-[13px] text-muted">What does your company do?<textarea rows={3} value={ws.about} onChange={(e) => setWs({ ...ws, about: e.target.value })} className={field + " resize-none"} /></label>
+            <label className="text-[13px] text-muted">Website<input value={ws.website} placeholder="No website" onChange={(e) => setWs({ ...ws, website: e.target.value })} className={field} /></label>
+            <label className="col-span-2 text-[13px] text-muted">Type of company<input value={ws.companyType} placeholder="For example Clothing brand" onChange={(e) => setWs({ ...ws, companyType: e.target.value })} className={field} /></label>
+            <label className="col-span-2 text-[13px] text-muted">What you do and sell<textarea rows={4} value={ws.whatWeDo} onChange={(e) => setWs({ ...ws, whatWeDo: e.target.value })} className={field + " resize-y"} /></label>
+            <label className="col-span-2 text-[13px] text-muted">How you make money<input value={ws.howWeMakeMoney} onChange={(e) => setWs({ ...ws, howWeMakeMoney: e.target.value })} className={field} /></label>
+            <label className="col-span-2 text-[13px] text-muted">
+              Company Brief <span className="text-faint">(every agent reads this; Markdown works)</span>
+              <textarea rows={10} value={ws.brief} placeholder="Written during onboarding. Describe the company for your agents." onChange={(e) => setWs({ ...ws, brief: e.target.value })} className={field + " resize-y font-mono text-[12.5px] leading-relaxed"} />
+            </label>
             <label className="text-[13px] text-muted">Default language<select className={field} defaultValue="en"><option value="en">English</option><option value="sv">Svenska</option></select></label>
           </div>
         )}

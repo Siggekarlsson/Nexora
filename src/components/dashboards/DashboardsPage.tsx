@@ -1,8 +1,9 @@
 "use client";
 
+import { AppLogo } from "@/components/ui/AppLogo";
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Blocks, Clock, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Clock, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { dashboards, timeSaved } from "@/data/dashboards";
 import { departmentColors, departmentName } from "@/data/departments";
@@ -165,10 +166,10 @@ function TimeSaved() {
 function Apps() {
   const integrations = useStore((s) => s.integrations);
   const apps = [
-    { id: "meta-ads", name: "Meta Ads", used: "Paid Ads" },
+    { id: "meta", name: "Meta Business", used: "Paid Ads" },
     { id: "hubspot", name: "HubSpot", used: "Pipeline" },
-    { id: "accounting", name: "Accounting export", used: "Finance" },
-    { id: "newsletter", name: "Newsletter", used: "Content" },
+    { id: "quickbooks", name: "QuickBooks", used: "Finance" },
+    { id: "mailchimp", name: "Mailchimp", used: "Content" },
   ];
   return (
     <div>
@@ -177,7 +178,7 @@ function Apps() {
       <div className="mt-5 space-y-2">
         {apps.map((a) => (
           <div key={a.id} className="glass flex items-center gap-3 rounded-xl px-4 py-3 text-[13px]">
-            <Blocks size={16} className="text-muted" />
+            <AppLogo id={a.id} size={34} />
             <span className="font-medium">{a.name}</span>
             <span className="text-muted">feeds {a.used}</span>
             {/* none of these apps can be connected yet, so their dashboards always run on sample data */}
