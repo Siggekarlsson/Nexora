@@ -31,6 +31,9 @@ type Body = {
   messages: Msg[];
 };
 
+/** Room for one wait-and-retry after a rate limit (Groq asks for up to 20 s). */
+export const maxDuration = 60;
+
 const GROQ_URL = "https://api.groq.com/openai/v1";
 const GROQ_DEFAULT = "llama-3.3-70b-versatile";
 
@@ -43,6 +46,23 @@ function provider() {
 }
 
 class ProviderError extends Error {}
+/** The AI provider's rate limit was still hit after one wait and retry. */
+class BusyError extends Error {}
+
+/** The latest `n` messages, starting with a user turn. */
+function recent(messages: Msg[], n: number) {
+  const out = messages.slice(-n);
+  while (out[0]?.role === "assistant") out.shift();
+  return out;
+}
+
+/** Seconds Groq asks us to wait, from "try again in 7.5s" / "in 1m2.3s" or the retry-after header. */
+function retryAfter(res: Response, data: { error?: { message?: string } }) {
+  const m = /try again in (?:(\d+)m)?([\d.]+)(ms|s)/i.exec(data?.error?.message ?? "");
+  if (m) return (Number(m[1] ?? 0) * 60 + Number(m[2]) / (m[3] === "ms" ? 1000 : 1));
+  const h = Number(res.headers.get("retry-after"));
+  return Number.isFinite(h) && h > 0 ? h : 5;
+}
 
 export async function GET() {
   const p = provider();
@@ -65,20 +85,25 @@ export async function POST(req: NextRequest) {
   try {
     const p = provider();
     if (p !== "mock") {
-      const { context, gmail, drive } = await integrationContext(req, last);
+      // Groq's free tier allows about 8,000 tokens a minute, and Composio's tool schemas alone are several
+      // thousand. So for Groq: no tools, app data fetched up front and kept short, a shorter prompt and
+      // only the latest 6 messages.
+      const compact = p === "groq";
+      const { context, gmail, drive } = await integrationContext(req, last, compact);
       const uid = readUid(req);
       const agent =
-        composioConfigured() && uid
+        !compact && composioConfigured() && uid
           ? await agentTools(uid).catch((e) => {
               console.error("[composio] agent tools failed:", describe(e));
               return null;
             })
           : null;
       const system =
-        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic", brief: body.brief, profile: body.profile, departments: body.departments }) +
+        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic", brief: body.brief, profile: body.profile, departments: body.departments, compact }) +
         context +
         (agent?.prompt ?? "");
-      const raw = p === "anthropic" ? await anthropic(system, messages, agent) : await groq(system, messages, agent);
+      const history = compact ? recent(messages, 6) : messages;
+      const raw = p === "anthropic" ? await anthropic(system, history, agent) : await groq(system, history, agent);
       const content = stripEcho(raw, last);
       const res = NextResponse.json({ content, provider: p });
       if (gmail) writeConn(res, "gmail", gmail);
@@ -89,6 +114,7 @@ export async function POST(req: NextRequest) {
     const note = "\n\n_Demo reply: no AI key is configured on the server. Add `GROQ_API_KEY` or `ANTHROPIC_API_KEY` in Vercel and redeploy._";
     return NextResponse.json({ content: mockReply(body.agent, last, body.skillName, body.docCount, body.profile, body.brief) + note, provider: p, mock: true });
   } catch (e) {
+    if (e instanceof BusyError) return NextResponse.json({ content: "AI:n är upptagen just nu, försök igen om en halv minut.", error: true, busy: true });
     const reason = e instanceof ProviderError ? e.message : "the AI service could not be reached";
     return NextResponse.json({ content: `The agent couldn't answer: ${reason}.`, error: true });
   }
@@ -190,6 +216,16 @@ async function groqCall(key: string, model: string, convo: GroqMsg[], tools: FnT
       res = await call(fallback);
       data = await res.json().catch(() => ({}));
     }
+  }
+  // Rate limited: wait as long as Groq asks (at most 20 s) and try once more.
+  if (res.status === 429) {
+    const wait = retryAfter(res, data);
+    console.warn(`[groq] 429 rate limit, retrying in ${wait.toFixed(1)}s`);
+    if (wait > 20) throw new BusyError();
+    await new Promise((r) => setTimeout(r, Math.ceil(wait * 1000) + 250));
+    res = await call(model);
+    data = await res.json().catch(() => ({}));
+    if (res.status === 429) throw new BusyError();
   }
   if (!res.ok) {
     const hint = res.status === 401 ? " – check that GROQ_API_KEY in Vercel is correct and redeploy" : "";

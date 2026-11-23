@@ -13,7 +13,7 @@ const SHOP = /\b(shopify|order|ordrar|beställning|butik|shop|store|produkt|prod
  * Pulls live data from the user's connected apps when the message is about them,
  * and returns it as extra system-prompt context.
  */
-export async function integrationContext(req: NextRequest, text: string) {
+export async function integrationContext(req: NextRequest, text: string, compact = false) {
   const parts: string[] = [];
   let gmail: GmailConn | null = null;
   let drive: DriveConn | null = null;
@@ -22,7 +22,7 @@ export async function integrationContext(req: NextRequest, text: string) {
     const uid = readUid(req);
     if (uid) {
       try {
-        parts.push(...(await composioContext(uid, { gmail: MAIL.test(text), drive: FILES.test(text), shopify: SHOP.test(text) })));
+        parts.push(...(await composioContext(uid, { gmail: MAIL.test(text), drive: FILES.test(text), shopify: SHOP.test(text) }, compact)));
       } catch (e) {
         parts.push(`The user's connected apps could not be reached (${(e as Error).message}). Tell the user.`);
       }
@@ -34,10 +34,10 @@ export async function integrationContext(req: NextRequest, text: string) {
     try {
       const fresh = await freshGmail(g);
       if (fresh.changed) gmail = fresh.conn;
-      const mails = await recentMail(fresh.conn);
+      const mails = (await recentMail(fresh.conn)).slice(0, compact ? 10 : undefined);
       parts.push(
         `Live data from the user's Gmail (${g.email ?? "connected account"}), latest ${mails.length} inbox messages:\n` +
-          mails.map((m, i) => `${i + 1}. From: ${m.from} | Subject: ${m.subject} | ${m.date}\n   ${m.snippet}`).join("\n"),
+          mails.map((m, i) => `${i + 1}. From: ${m.from} | Subject: ${m.subject} | ${m.date}\n   ${m.snippet.slice(0, compact ? 150 : 300)}`).join("\n"),
       );
     } catch (e) {
       parts.push(`Gmail is connected but could not be read (${(e as Error).message}). Tell the user.`);
@@ -51,8 +51,8 @@ export async function integrationContext(req: NextRequest, text: string) {
       if (fresh.changed) drive = fresh.conn;
       const files = await recentFiles(fresh.conn);
       // read the text of the newest few readable files (Google Docs, txt, md, csv)
-      const readable = files.filter(isReadable).slice(0, 3);
-      const texts = await Promise.all(readable.map((f) => fileText(fresh.conn, f).catch(() => null)));
+      const readable = files.filter(isReadable).slice(0, compact ? 1 : 3);
+      const texts = await Promise.all(readable.map((f) => fileText(fresh.conn, f).then((t) => (compact ? t?.slice(0, 1500) : t) ?? null).catch(() => null)));
       parts.push(
         `Live data from the user's Google Drive (${dc.email ?? "connected account"}), ${files.length} most recently modified files:\n` +
           files.map((f) => `- ${f.name} | ${f.mimeType} | modified ${f.modifiedTime.slice(0, 10)}${f.webViewLink ? ` | ${f.webViewLink}` : ""}`).join("\n") +

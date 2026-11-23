@@ -18,6 +18,8 @@ export type PromptContext = {
   about?: string;
   docs?: { name: string; text?: string }[];
   webSearch?: boolean;
+  /** Short prompt for small rate-limited models (Groq free tier): profile and brief cut to about 800 tokens. */
+  compact?: boolean;
   /** Company brief written during onboarding. */
   brief?: string;
   /** Answers from onboarding. */
@@ -46,13 +48,14 @@ function customPersona(agent: DepartmentId, ctx: PromptContext) {
 
 function profileBlock(ctx: PromptContext) {
   const p = ctx.profile;
+  const c = ctx.compact;
   if (!p || !(p.companyName || p.whatWeDo)) return "";
   const rows = [
     p.companyName && `- Company: ${p.companyName}`,
     p.companyType && `- Type of company: ${p.companyType}`,
     `- Website: ${p.hasWebsite && p.website ? p.website : "none"}`,
-    p.whatWeDo && `- What they do and sell: ${p.whatWeDo.slice(0, 2000)}`,
-    p.howWeMakeMoney && `- How they make money: ${p.howWeMakeMoney}`,
+    p.whatWeDo && `- What they do and sell: ${p.whatWeDo.slice(0, c ? 500 : 2000)}`,
+    p.howWeMakeMoney && `- How they make money: ${p.howWeMakeMoney.slice(0, c ? 200 : 1000)}`,
     p.goals?.length && `- What Nexora should help with: ${p.goals.join("; ")}`,
     p.name && `- The user: ${p.name}${p.role ? `, ${p.role}` : ""}`,
     p.apps?.length && `- Apps the team uses: ${p.apps.filter((a) => a !== "none").join(", ") || "none"}`,
@@ -66,7 +69,8 @@ export function systemPrompt(agent: DepartmentId, ctx: PromptContext = {}) {
   const docs = ctx.docs ?? [];
   const user = ctx.profile?.name?.trim() || siteConfig.user.firstName;
   const role = ctx.profile?.role?.trim() ? ` (${ctx.profile.role.trim()})` : "";
-  let budget = 60000;
+  // Compact: profile + brief stay around 800 tokens, documents around 1,000.
+  let budget = ctx.compact ? 4000 : 60000;
   const docBlock = docs.length
     ? docs
         .map((d) => {
@@ -80,13 +84,13 @@ export function systemPrompt(agent: DepartmentId, ctx: PromptContext = {}) {
 
   return [
     customPersona(agent, ctx),
-    `You work for ${company}.${ctx.about ? ` About the company: ${ctx.about}` : ""} The user is ${user}${role}.`,
+    `You work for ${company}.${ctx.about ? ` About the company: ${ctx.compact ? ctx.about.slice(0, 400) : ctx.about}` : ""} The user is ${user}${role}.`,
     ctx.profile?.goals?.length ? `What the user wants help with first: ${ctx.profile.goals.join("; ")}.` : "",
     ctx.departments && agent !== "brain"
       ? `The company's departments: ${Object.values(ctx.departments).map((d) => d.name).join(", ")}.`
       : "",
     profileBlock(ctx),
-    ctx.brief ? `## Company Brief\n${ctx.brief.slice(0, 4000)}` : "",
+    ctx.brief ? `## Company Brief\n${ctx.brief.slice(0, ctx.compact ? 1200 : 4000)}` : "",
     ctx.profile?.companyName || ctx.brief
       ? "Use the company profile and brief in every answer: tailor ideas, drafts and advice to this business, its customers and how it makes money. When the user asks what you know about the company, answer from them. When connected apps (mail, sales, ads) are available, combine their data with the profile, for example to suggest ads and marketing based on actual sales and customer emails."
       : "",
