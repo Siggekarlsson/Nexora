@@ -29,7 +29,8 @@ Logos come from Composio first. If Composio has none, the card uses the Iconify 
 ### Apps that show "Setup needed"
 
 - **Base44**: Composio has no toolkit for it yet.
-- **Any app whose toolkit needs its own auth config**: Composio has no shared sign-in app for these, so you need to create an auth config with your own OAuth app in the Composio dashboard. Nexora picks these up from Composio's error when it creates a session, and the card then shows "Setup needed". The live list for this deployment is in `GET /api/integrations/status`: every app with `"setup": true`.
+- **Brex**: Composio has no shared sign-in app for it, so it needs an auth config with your own Brex OAuth app in the Composio dashboard.
+- **Other apps that need their own auth config**: Nexora picks these up from Composio's error when it creates a session, and the card then shows "Setup needed". On 2026-11-23 Brex was the only one. The live list for this deployment is in `GET /api/integrations/status`: every app with `"setup": true`.
 - **Coming Soon** (greyed out, cannot be connected): Proton Mail, Google Forms, DocuSign, Amazon S3, iCloud Drive, Nextcloud, Obsidian, Evernote, Xero, Sage, PayPal, Expensify, Shopify, TikTok, WooCommerce, Zapier, PostgreSQL, Snowflake, n8n, Exa.
 
 ### Rekommenderat: Composio (en nyckel)
