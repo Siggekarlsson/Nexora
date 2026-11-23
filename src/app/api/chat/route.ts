@@ -84,7 +84,8 @@ function retryAfter(res: Response, data: { error?: { message?: string } }) {
 export async function GET() {
   const p = provider();
   const model = p === "anthropic" ? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5" : p === "groq" ? process.env.GROQ_MODEL ?? GROQ_DEFAULT : null;
-  return NextResponse.json({ provider: p, model });
+  const web = p === "anthropic" ? "web_search" : p === "groq" ? await groqWebModel(clean(process.env.GROQ_API_KEY)!) : null;
+  return NextResponse.json({ provider: p, model, webModel: web });
 }
 
 export async function POST(req: NextRequest) {
@@ -216,11 +217,33 @@ async function groq(system: string, messages: Msg[], agent: Agent) {
   return "I looked through your connected apps but could not finish the answer. Try a narrower question.";
 }
 
-/** Groq's compound model, which runs web search on Groq's side. */
+/**
+ * Groq's compound model, which runs web search on Groq's side. The name differs between accounts
+ * ("groq/compound", older "compound-beta"), so it is picked from the account's model list (or GROQ_WEB_MODEL).
+ */
+let webModel: string | null | undefined;
+async function groqWebModel(key: string) {
+  const forced = clean(process.env.GROQ_WEB_MODEL);
+  if (forced) return forced;
+  if (webModel !== undefined) return webModel;
+  try {
+    const res = await fetch(`${GROQ_URL}/models`, { headers: { authorization: `Bearer ${key}` } });
+    const ids = res.ok ? ((await res.json()) as { data: { id: string }[] }).data.map((m) => m.id) : [];
+    webModel = ["groq/compound", "compound-beta", "groq/compound-mini", "compound-beta-mini"].find((m) => ids.includes(m)) ?? ids.find((id) => /compound/i.test(id)) ?? null;
+    if (!webModel) console.error("[groq] no compound (web search) model on this account; models:", ids.join(", "));
+  } catch (e) {
+    console.error("[groq] model list failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+  return webModel;
+}
+
 async function groqWeb(system: string, messages: Msg[]) {
   const key = clean(process.env.GROQ_API_KEY)!;
+  const model = await groqWebModel(key);
+  if (!model) return "Webbsökning är inte tillgänglig: Groq-kontot har ingen modell med inbyggd webbsökning (groq/compound). Jag kan därför inte söka på webben just nu.";
   try {
-    const msg = await groqCall(key, "groq/compound", [{ role: "system", content: system }, ...messages], undefined, () => {});
+    const msg = await groqCall(key, model, [{ role: "system", content: system }, ...messages], undefined, () => {});
     return (msg.content as string) || "Webbsökningen gav inget svar just nu. Försök igen om en stund.";
   } catch (e) {
     if (e instanceof BusyError) throw e;
@@ -242,7 +265,7 @@ async function groqCall(key: string, model: string, convo: GroqMsg[], tools: FnT
 
   // If the model was retired or renamed, pick another available chat model and retry once.
   // (Not for groq/compound: another model would answer without searching the web.)
-  if (!res.ok && model !== "groq/compound" && (res.status === 404 || res.status === 400) && /model/i.test(JSON.stringify(data))) {
+  if (!res.ok && !/compound/i.test(model) && (res.status === 404 || res.status === 400) && /model/i.test(JSON.stringify(data))) {
     const fallback = await groqFallbackModel(key);
     if (fallback) {
       setModel(fallback);
