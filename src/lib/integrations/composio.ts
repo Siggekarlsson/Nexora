@@ -321,7 +321,7 @@ const MAX_FILE = 20_000;
 const READABLE = /^(application\/vnd\.google-apps\.document|text\/(plain|markdown|csv))$/;
 
 /** Live data for the chat: what's connected and relevant to the message. */
-export async function composioContext(uid: string, want: Partial<Record<AppId, boolean>>) {
+export async function composioContext(uid: string, want: Partial<Record<AppId, boolean>>, compact = false) {
   const apps = composioApps();
   if (!apps.some((a) => want[a])) return [];
   const status = await appStatus(uid);
@@ -329,17 +329,22 @@ export async function composioContext(uid: string, want: Partial<Record<AppId, b
   const parts: string[] = [];
 
   if (want.gmail && status.gmail?.connected) {
+    // Compact mode (small models such as Groq's free tier): at most 10 mails, 150 characters of text each.
+    const max = compact ? 10 : 15;
+    const textLen = compact ? 150 : 300;
+    const who = status.gmail.account ? ` (${status.gmail.account})` : "";
     try {
-      const data = await run(s, "GMAIL_FETCH_EMAILS", { max_results: 15, label_ids: ["INBOX"], verbose: false, include_payload: false });
-      const mails = pick(data, ["messages"]);
+      const data = await run(s, "GMAIL_FETCH_EMAILS", { max_results: max, label_ids: ["INBOX"], verbose: false, include_payload: false });
+      const mails = pick(data, ["messages"]).slice(0, max);
       parts.push(
-        `Live data from the user's Gmail, latest ${mails.length} inbox messages:\n` +
+        `Gmail is connected${who} and was read just now. You have access: never say you cannot reach the user's email. Latest ${mails.length} inbox messages:\n` +
           mails
-            .map((m, i) => `${i + 1}. From: ${str(m.sender ?? m.from)} | Subject: ${str(m.subject)} | ${str(m.messageTimestamp ?? m.date)}\n   ${str(m.preview && typeof m.preview === "object" ? (m.preview as { body?: string }).body : m.snippet ?? m.messageText).slice(0, 300)}`)
+            .map((m, i) => `${i + 1}. From: ${str(m.sender ?? m.from)} | Subject: ${str(m.subject)} | ${str(m.messageTimestamp ?? m.date)}\n   ${str(m.preview && typeof m.preview === "object" ? (m.preview as { body?: string }).body : m.snippet ?? m.messageText).replace(/\s+/g, " ").slice(0, textLen)}`)
             .join("\n"),
       );
     } catch (e) {
-      parts.push(`Gmail is connected but could not be read (${(e as Error).message}). Tell the user.`);
+      console.error("[composio] gmail read failed:", describe(e));
+      parts.push(`Gmail is connected${who}, but reading it failed just now with this error: ${(e as Error).message}. Tell the user this exact error. Do not say you have no access, and do not make up any messages.`);
     }
   }
 
@@ -348,10 +353,10 @@ export async function composioContext(uid: string, want: Partial<Record<AppId, b
       const data = await run(s, "GOOGLEDRIVE_FIND_FILE", {
         q: "trashed = false and mimeType != 'application/vnd.google-apps.folder'",
         orderBy: "modifiedTime desc",
-        pageSize: 15,
+        pageSize: compact ? 10 : 15,
       });
       const files = pick(data, ["files"]);
-      const readable = files.filter((f) => READABLE.test(str(f.mimeType))).slice(0, 3);
+      const readable = files.filter((f) => READABLE.test(str(f.mimeType))).slice(0, compact ? 1 : 3);
       const texts = await Promise.all(
         readable.map(async (f) => {
           try {
@@ -359,7 +364,7 @@ export async function composioContext(uid: string, want: Partial<Record<AppId, b
               fileId: str(f.id),
               ...(str(f.mimeType).startsWith("application/vnd.google-apps") ? { mime_type: "text/plain" } : {}),
             });
-            return fileContent(d);
+            return (await fileContent(d))?.slice(0, compact ? 1500 : MAX_FILE) ?? null;
           } catch {
             return null;
           }
