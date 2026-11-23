@@ -12,7 +12,7 @@ export function TrialPill() {
   const [collapsed, setCollapsed] = useState(false);
   const started = useStore((s) => s.trialStarted);
   const path = usePathname();
-  if (started || path.startsWith("/chat") || path === "/ready") return null;
+  if (started || path.startsWith("/chat") || path === "/ready" || path.startsWith("/onboarding")) return null;
   return (
     <motion.div layout className="fixed bottom-5 left-5 z-40 flex items-center gap-2 rounded-full glass p-1.5 pl-4 shadow-xl shadow-black/30">
       <AnimatePresence initial={false} mode="popLayout">

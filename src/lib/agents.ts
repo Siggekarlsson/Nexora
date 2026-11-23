@@ -18,12 +18,27 @@ export type PromptContext = {
   about?: string;
   docs?: { name: string; text?: string }[];
   webSearch?: boolean;
+  /** Company brief written during onboarding. */
+  brief?: string;
+  /** Answers from onboarding. */
+  profile?: { name?: string; role?: string; goals?: string[]; apps?: string[] };
+  /** Department names and focus areas written for this company during onboarding. */
+  departments?: Record<string, { name: string; tagline: string[] }>;
 };
+
+/** Persona for a department whose name and focus were written for this company. */
+function customPersona(agent: DepartmentId, ctx: PromptContext) {
+  const d = agent === "brain" ? undefined : ctx.departments?.[agent];
+  if (!d) return agentPersona[agent];
+  return `You are the ${d.name} agent. You help the team with ${d.tagline.join(", ")}.`;
+}
 
 export function systemPrompt(agent: DepartmentId, ctx: PromptContext = {}) {
   const today = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Stockholm" });
   const company = ctx.company?.trim() || siteConfig.user.company;
   const docs = ctx.docs ?? [];
+  const user = ctx.profile?.name?.trim() || siteConfig.user.firstName;
+  const role = ctx.profile?.role?.trim() ? ` (${ctx.profile.role.trim()})` : "";
   let budget = 60000;
   const docBlock = docs.length
     ? docs
@@ -37,8 +52,13 @@ export function systemPrompt(agent: DepartmentId, ctx: PromptContext = {}) {
     : "No documents have been uploaded to Company Brain yet.";
 
   return [
-    agentPersona[agent],
-    `You work for ${company}.${ctx.about ? ` About the company: ${ctx.about}` : ""} The user is ${siteConfig.user.firstName}.`,
+    customPersona(agent, ctx),
+    `You work for ${company}.${ctx.about ? ` About the company: ${ctx.about}` : ""} The user is ${user}${role}.`,
+    ctx.profile?.goals?.length ? `What the user wants help with first: ${ctx.profile.goals.join("; ")}.` : "",
+    ctx.departments && agent !== "brain"
+      ? `The company's departments: ${Object.values(ctx.departments).map((d) => d.name).join(", ")}.`
+      : "",
+    ctx.brief ? `## Company brief\n${ctx.brief.slice(0, 4000)}` : "",
     `Today's date is ${today}. Treat anything you remember from training as possibly outdated.`,
     ctx.skillName ? `The user started the skill "${ctx.skillName}". Follow it: ask for any missing input briefly, then produce the deliverable.` : "",
     "## Facts and sources",

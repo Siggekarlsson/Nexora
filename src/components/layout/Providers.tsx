@@ -1,7 +1,13 @@
 "use client";
 
 import { ThemeProvider } from "next-themes";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { applyTree } from "@/data/tree";
+import { getState, useStore } from "@/lib/store";
+import { setOnboardedCookie } from "@/lib/onboarding";
+
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 import { CommandPalette } from "./CommandPalette";
 
 interface UIState {
@@ -20,6 +26,29 @@ export function useUI() {
 export function Providers({ children }: { children: React.ReactNode }) {
   const [paletteOpen, setPaletteOpenState] = useState(false);
   const setPaletteOpen = useCallback((v: boolean) => setPaletteOpenState(v), []);
+  const path = usePathname();
+  const router = useRouter();
+  const onboarded = useStore((s) => s.onboarding.done);
+  const tree = useStore((s) => s.tree);
+  // Bumped when the company tree changes, so pages re-read departments and skills.
+  const [treeKey, setTreeKey] = useState(0);
+
+  // Apply the tree written during onboarding before the first paint.
+  const applied = useRef(false);
+  useIsoLayoutEffect(() => {
+    if (!tree && !applied.current) return;
+    applied.current = true;
+    applyTree(tree);
+    // Onboarding itself must not remount (it is what writes the tree); other pages re-read it.
+    if (!window.location.pathname.startsWith("/onboarding")) setTreeKey((k) => k + 1);
+  }, [tree]);
+
+  // Until onboarding is done every page goes to /onboarding (middleware does the same server side).
+  useEffect(() => {
+    const done = getState().onboarding.done;
+    setOnboardedCookie(done);
+    if (!done && !path.startsWith("/onboarding")) router.replace("/onboarding");
+  }, [path, router, onboarded]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -35,8 +64,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
       <UIContext.Provider value={{ paletteOpen, setPaletteOpen }}>
-        {children}
-        <CommandPalette />
+        <div key={treeKey} className="contents">{children}</div>
+        {!path.startsWith("/onboarding") && <CommandPalette />}
       </UIContext.Provider>
     </ThemeProvider>
   );

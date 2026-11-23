@@ -22,6 +22,11 @@ export const TOOLKIT = {
   outlook: "outlook",
   accounting: "quickbooks",
   newsletter: "mailchimp",
+  onedrive: "one_drive",
+  sharepoint: "share_point",
+  calendar: "googlecalendar",
+  teams: "microsoft_teams",
+  notion: "notion",
 } as const;
 export type AppId = keyof typeof TOOLKIT;
 export const ALL_APPS = Object.keys(TOOLKIT) as AppId[];
@@ -255,17 +260,23 @@ async function fileContent(d: Record<string, unknown>) {
 
 /** Connect route via Composio: sends the browser to Composio's sign-in page for the app. */
 export async function composioConnect(req: NextRequest, app: AppId, appOrigin: string) {
-  const res = NextResponse.redirect(`${appOrigin}/integrations`);
+  // Onboarding sends ?next=/onboarding so the user comes back to it; any other value is ignored.
+  const back = returnPath(req.nextUrl.searchParams.get("next"));
+  const res = NextResponse.redirect(`${appOrigin}${back}`);
   try {
     const uid = ensureUid(req, res);
-    const url = await connectUrl(uid, app, `${appOrigin}/api/integrations/composio/callback?app=${app}`);
+    const next = back === "/integrations" ? "" : `&next=${encodeURIComponent(back)}`;
+    const url = await connectUrl(uid, app, `${appOrigin}/api/integrations/composio/callback?app=${app}${next}`);
     res.headers.set("location", url);
   } catch (e) {
     console.error(`[composio] connect ${app} failed:`, describe(e));
-    res.headers.set("location", `${appOrigin}/integrations?error=${app}_failed`);
+    res.headers.set("location", `${appOrigin}${back}?error=${app}_failed`);
   }
   return res;
 }
+
+/** Where to send the browser after a sign-in: only the pages listed here, never an outside URL. */
+export const returnPath = (next: string | null) => (next === "/onboarding" ? "/onboarding" : "/integrations");
 
 /** Error summary for server logs: class, message, status and Composio log id. Never includes the API key. */
 export function describe(e: unknown) {
@@ -286,6 +297,11 @@ const NAMES: Record<AppId, string> = {
   outlook: "Outlook",
   accounting: "QuickBooks",
   newsletter: "Mailchimp",
+  onedrive: "OneDrive",
+  sharepoint: "SharePoint",
+  calendar: "Google Calendar",
+  teams: "Microsoft Teams",
+  notion: "Notion",
 };
 
 /** OpenAI-style function tool, as Composio's default provider returns them. */
