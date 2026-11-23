@@ -125,7 +125,7 @@ async function toolkitItems(s: Awaited<ReturnType<typeof session>>) {
   for (let page = 0; page < 10; page++) {
     const r = await s.toolkits({ toolkits: slugs, limit: 100, ...(cursor ? { cursor } : {}) });
     items.push(...r.items);
-    cursor = (r as { nextCursor?: string | null }).nextCursor ?? undefined;
+    cursor = r.cursor;
     if (!cursor) break;
   }
   return items;
@@ -135,13 +135,25 @@ async function toolkitItems(s: Awaited<ReturnType<typeof session>>) {
 let logoCache: { at: number; logos: Record<string, string> } | null = null;
 export async function toolkitLogos(): Promise<Record<string, string>> {
   if (logoCache && Date.now() - logoCache.at < 6 * 3600_000) return logoCache.logos;
-  const items = await toolkitItems(await session("nexora_catalog"));
+  const apps = composioApps();
+  const bySlug = new Map<string, string>();
+  try {
+    // The toolkit catalog has a logo for every toolkit Composio knows; unknown slugs are left out.
+    const list = await composio().toolkits.getMany(apps.map((a) => TOOLKIT[a]), { limit: 1000 });
+    for (const t of list) if (t.meta?.logo) bySlug.set(t.slug, t.meta.logo);
+  } catch (e) {
+    console.error("[composio] toolkit catalog failed:", describe(e));
+  }
+  if (!bySlug.size) {
+    const items = await toolkitItems(await session("nexora_catalog"));
+    for (const i of items) if (i.logo) bySlug.set(i.slug, i.logo);
+  }
   const logos: Record<string, string> = {};
-  for (const app of composioApps()) {
-    const logo = items.find((i) => i.slug === TOOLKIT[app])?.logo;
+  for (const app of apps) {
+    const logo = bySlug.get(TOOLKIT[app]!);
     if (logo) logos[app] = logo;
   }
-  logoCache = { at: Date.now(), logos };
+  if (Object.keys(logos).length) logoCache = { at: Date.now(), logos };
   return logos;
 }
 
