@@ -1,8 +1,9 @@
 "use client";
 
 import { AppLogo } from "@/components/ui/AppLogo";
+import { ConnectedBadge } from "@/components/ui/ConnectedButton";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Clock, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { dashboards, timeSaved } from "@/data/dashboards";
@@ -11,6 +12,7 @@ import type { DepartmentId } from "@/lib/types";
 import { Sparkline } from "./Sparkline";
 import { BrainPanel } from "./BrainPanel";
 import { useStore } from "@/lib/store";
+import { refreshConnections } from "@/lib/connect";
 
 const tabs = ["Overview", ...dashboards.map((d) => d.tab)];
 const modes = ["Control Room", "Time and Money Saved", "Apps"] as const;
@@ -165,6 +167,7 @@ function TimeSaved() {
 
 function Apps() {
   const integrations = useStore((s) => s.integrations);
+  useEffect(() => void refreshConnections(), []);
   const apps = [
     { id: "meta", name: "Meta Business", used: "Paid Ads" },
     { id: "hubspot", name: "HubSpot", used: "Pipeline" },
@@ -181,10 +184,7 @@ function Apps() {
             <AppLogo id={a.id} size={34} />
             <span className="font-medium">{a.name}</span>
             <span className="text-muted">feeds {a.used}</span>
-            {/* none of these apps can be connected yet, so their dashboards always run on sample data */}
-            <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] ${integrations[a.id] ? "bg-[#5fe08a]/15 text-[#5fe08a]" : "bg-hover text-muted"}`}>
-              {integrations[a.id] ? "Connected" : "Sample data"}
-            </span>
+            {integrations[a.id] ? <ConnectedBadge className="ml-auto" /> : <span className="ml-auto rounded-full bg-hover px-2 py-0.5 text-[11px] text-muted">Sample data</span>}
           </div>
         ))}
         <Link href="/integrations" className="btn btn-glass mt-2">Manage integrations</Link>

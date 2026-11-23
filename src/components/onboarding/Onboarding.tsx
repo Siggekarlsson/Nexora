@@ -8,9 +8,10 @@ import { Markdown } from "@/components/chat/Markdown";
 import { departmentColors } from "@/data/departments";
 import { COMPANY_TYPES, companyTypeLabel, describeHints, finishOnboarding, helpOptions, NONE_APP, ROLES, WORK_APPS } from "@/lib/onboarding";
 import { AppLogo } from "@/components/ui/AppLogo";
-import { connectApp } from "@/lib/connect";
+import { connectApp, refreshConnections } from "@/lib/connect";
+import { ConnectedBadge } from "@/components/ui/ConnectedButton";
 import { DynamicIcon } from "@/components/ui/DynamicIcon";
-import { getState, setState, type TreeOverride } from "@/lib/store";
+import { getState, setState, useStore, type TreeOverride } from "@/lib/store";
 import type { DepartmentId } from "@/lib/types";
 import {
   BrainAvatar, ChoiceCard, ContinueButton, Glows, Header, LogoBadge, MiniTree, Question, RotatingLine, TextLink,
@@ -132,11 +133,13 @@ export function Onboarding() {
     update({ step });
   }, [update]);
 
+  const connectedMap = useStore((s) => s.integrations);
   if (!d) return <div data-onboarding className="fixed inset-0 z-30 bg-bg" />;
 
   const stepIndex = STEP_OF[d.step];
   const companyName = d.chosen?.name || d.company.trim() || (d.website ? capitalise(hostOf(d.website).split(".")[0]) : "");
   const appInfo = WORK_APPS.find((a) => a.id === d.connectApp) ?? WORK_APPS.find((a) => a.id === d.apps.find((x) => x !== NONE_APP));
+  const appConnected = !!appInfo && !!connectedMap[appInfo.integration];
 
   // ---- step actions ----
   const canContinue: Partial<Record<StepId, boolean>> = {
@@ -404,8 +407,8 @@ export function Onboarding() {
             <>
               <ContinueButton
                 enabled
-                label={`Connect ${appInfo.name}`}
-                onClick={() => connectApp(appInfo.integration, "/onboarding")}
+                label={appConnected ? "Continue" : `Connect ${appInfo.name}`}
+                onClick={() => (appConnected ? afterConnect() : connectApp(appInfo.integration, "/onboarding"))}
               />
               <div className="flex gap-6">
                 <TextLink onClick={() => update({ connectApp: "" })}>Pick Another App</TextLink>
@@ -500,6 +503,8 @@ function Input({
 }
 
 function ConnectStep({ app, picking, onPick }: { app: (typeof WORK_APPS)[number]; picking: boolean; onPick: (id: string) => void }) {
+  const integrations = useStore((s) => s.integrations);
+  useEffect(() => void refreshConnections(), []);
   if (picking) {
     return (
       <>
@@ -508,6 +513,7 @@ function ConnectStep({ app, picking, onPick }: { app: (typeof WORK_APPS)[number]
           {WORK_APPS.map((a) => (
             <ChoiceCard key={a.id} selected={false} onClick={() => onPick(a.id)}>
               <AppLogo id={a.integration} size={36} /> {a.name}
+              {integrations[a.integration] && <ConnectedBadge className="ml-auto" />}
             </ChoiceCard>
           ))}
         </div>
@@ -519,10 +525,11 @@ function ConnectStep({ app, picking, onPick }: { app: (typeof WORK_APPS)[number]
       <Question title={`Connect ${app.name} so I can work on your real ${app.what}.`} sub="I read what you share and ask before I write anything. You can skip this." />
       <div className="glass flex w-full max-w-[440px] items-center gap-4 rounded-2xl p-5">
         <AppLogo id={app.integration} size={52} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-[16px] font-medium">{app.name}</div>
           <div className="mt-0.5 text-[13.5px] text-muted">{app.desc}</div>
         </div>
+        {integrations[app.integration] && <ConnectedBadge />}
       </div>
     </>
   );

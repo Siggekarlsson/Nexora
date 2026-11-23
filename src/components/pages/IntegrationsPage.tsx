@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Loader2, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppLogo, setLogos } from "@/components/ui/AppLogo";
 import { appsIn, CATEGORIES, INTEGRATIONS, integrationById, type CategoryId, type Integration } from "@/data/integrations";
 import { setState } from "@/lib/store";
 import { connectApp } from "@/lib/connect";
+import { ConnectedButton } from "@/components/ui/ConnectedButton";
 
 type AppState = { connected: boolean; setup: boolean; account?: string | null };
 type Status = { composio: boolean; apps: Record<string, AppState>; logos: Record<string, string> };
@@ -44,8 +45,8 @@ export function IntegrationsPage() {
       const name = integrationById[id]?.name ?? "The app";
       setNotice(
         connected
-          ? { text: `${name} is connected. Ask an agent about it in Chat.`, ok: true }
-          : { text: /not_configured$/.test(error!) ? `${name} can't be connected yet: it needs setup on the server.` : `${name} could not be connected. Try again.`, ok: false },
+          ? { text: `${name} is connected.`, ok: true }
+          : { text: /not_configured$/.test(error!) ? `${name} can't be connected yet: it needs setup on the server.` : `${name} could not be connected. The sign-in did not finish, so nothing was saved. Try again.`, ok: false },
       );
       window.history.replaceState(null, "", "/integrations");
     }
@@ -83,9 +84,13 @@ export function IntegrationsPage() {
 
   const disconnect = async (id: string) => {
     setBusy(id);
-    await fetch("/api/integrations/disconnect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
+    const name = integrationById[id]?.name ?? "The app";
+    const ok = await fetch("/api/integrations/disconnect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) })
+      .then((r) => r.ok)
+      .catch(() => false);
     await load();
     setBusy(null);
+    setNotice(ok ? { text: `${name} is disconnected.`, ok: true } : { text: `${name} could not be disconnected. Try again.`, ok: false });
   };
 
   return (
@@ -159,21 +164,17 @@ function AppCard({
   const soon = app.category === "soon";
   const setup = !soon && loaded && (!st || st.setup);
   return (
-    <div className={`glass flex items-center gap-3.5 rounded-2xl px-4 py-3.5 ${soon ? "opacity-55" : ""}`}>
+    <div className={`glass flex flex-wrap items-center gap-3.5 rounded-2xl px-4 py-3.5 ${soon ? "opacity-55" : ""}`}>
       <AppLogo id={app.id} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14.5px] font-medium">{app.name}</div>
-        <div className="line-clamp-2 text-[12.5px] leading-snug text-muted">{st?.connected && st.account ? st.account : app.desc}</div>
+        <div className="line-clamp-2 text-[12.5px] leading-snug text-muted">{app.desc}</div>
+        {st?.connected && st.account && <div className="truncate text-[12px] text-faint">{st.account}</div>}
       </div>
       {soon ? (
         <button disabled className="shrink-0 cursor-not-allowed rounded-full bg-fg/10 px-3.5 py-1.5 text-[12.5px] text-muted">Coming Soon</button>
       ) : st?.connected ? (
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="flex items-center gap-1 text-[12.5px] text-[#5fe08a]"><Check size={13} /> Connected</span>
-          <button onClick={onDisconnect} disabled={busy} className="rounded-full px-2.5 py-1.5 text-[12.5px] text-muted hover:bg-hover hover:text-fg">
-            {busy ? <Loader2 size={13} className="animate-spin" /> : "Disconnect"}
-          </button>
-        </div>
+        <ConnectedButton name={app.name} busy={busy} onDisconnect={onDisconnect} />
       ) : setup ? (
         <span className="shrink-0 rounded-full border border-line px-3 py-1.5 text-[12px] text-muted" title="This app needs its own auth config in Composio before it can be connected.">Setup needed</span>
       ) : (
