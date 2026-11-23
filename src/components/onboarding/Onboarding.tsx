@@ -637,7 +637,7 @@ function IdentifyStep({
   );
 }
 
-const CHECKLIST = ["Reading your website", "Writing the brief", "Shaping the tree", "Remembering the facts", "Writing a short audit"];
+const CHECKLIST = ["Reading about your business", "Writing the brief", "Shaping the tree", "Remembering the facts", "Writing a short audit"];
 const TIPS = [
   "📈 McKinsey 2025 · 88% of companies now use AI",
   "💡 Tip · The brief it writes rides along in every answer, so agents sound like your company.",
@@ -710,7 +710,7 @@ function BuildingStep({ d, companyName, onDone }: { d: Draft; companyName: strin
   const names = Object.values(result?.departments ?? {}).map((x) => x?.name).filter(Boolean) as string[];
   const stage = Math.min(4, Math.floor(progress * 5));
   const statuses = [
-    ["Finding the pages that say what you do…", "Reading about your services…"],
+    d.noWebsite || !d.website ? ["Reading what you told me…", "Picking out what you sell…"] : ["Finding the pages that say what you do…", "Reading about your services…"],
     ["Writing the brief…", "Picking out how you sell…"],
     names.length ? names.map((n) => `Filling out ${n}…`) : ["Shaping your departments…", "Filling out Operations…", "Filling out Sales…"],
     ["Remembering the facts…"],

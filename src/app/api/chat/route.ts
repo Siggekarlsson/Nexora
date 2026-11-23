@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     }
     await new Promise((r) => setTimeout(r, 700));
     const note = "\n\n_Demo reply: no AI key is configured on the server. Add `GROQ_API_KEY` or `ANTHROPIC_API_KEY` in Vercel and redeploy._";
-    return NextResponse.json({ content: mockReply(body.agent, last, body.skillName, body.docCount) + note, provider: p, mock: true });
+    return NextResponse.json({ content: mockReply(body.agent, last, body.skillName, body.docCount, body.profile, body.brief) + note, provider: p, mock: true });
   } catch (e) {
     const reason = e instanceof ProviderError ? e.message : "the AI service could not be reached";
     return NextResponse.json({ content: `The agent couldn't answer: ${reason}.`, error: true });
