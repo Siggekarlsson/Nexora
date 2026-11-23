@@ -61,7 +61,7 @@ export function HudPanels({ visible }: { visible: boolean }) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16, transition: { delay: 0, duration: 0.25 } }}
             transition={{ delay: 1.4, duration: 0.6 }}
-            className="pointer-events-none absolute left-6 top-1/2 z-10 hidden w-52 -translate-y-1/2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted xl:block"
+            className="pointer-events-none absolute left-6 top-1/2 z-10 hidden w-52 -translate-y-1/2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted 2xl:block"
           >
             <div className="mb-2 flex items-center gap-2 text-[#7cc4ff]">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7cc4ff]" /> System status
@@ -87,7 +87,7 @@ export function HudPanels({ visible }: { visible: boolean }) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 16, transition: { delay: 0, duration: 0.25 } }}
             transition={{ delay: 1.6, duration: 0.6 }}
-            className="pointer-events-none absolute right-6 top-1/2 z-10 hidden w-60 -translate-y-1/2 font-mono text-[10px] tracking-[0.06em] text-muted xl:block"
+            className="pointer-events-none absolute right-6 top-1/2 z-10 hidden w-60 -translate-y-1/2 font-mono text-[10px] tracking-[0.06em] text-muted 2xl:block"
           >
             <div className="mb-2 flex items-center justify-end gap-2 uppercase tracking-[0.14em] text-[#b98bff]">
               Agent activity <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#b98bff]" />
