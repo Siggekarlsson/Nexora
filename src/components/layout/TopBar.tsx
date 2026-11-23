@@ -11,9 +11,9 @@ import {
 import { Logo } from "@/components/brand/Logo";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { Popover } from "@/components/ui/Popover";
-import { siteConfig } from "@/config/site";
 import { useUI } from "./Providers";
 import { setState, useStore } from "@/lib/store";
+import { logout } from "@/lib/logout";
 
 const mainNav = [
   { href: "/", label: "Tree", icon: Network },
@@ -40,7 +40,10 @@ export function TopBar() {
   const close = () => setMenu(null);
   const toggle = (m: typeof menu) => setMenu((cur) => (cur === m ? null : m));
   const unread = useStore((s) => s.notifications.length);
-  const initials = siteConfig.user.firstName[0] + siteConfig.user.lastName[0];
+  const profileName = useStore((s) => s.profile.name?.trim() ?? "");
+  const company = useStore((s) => s.profile.companyName?.trim() ?? "");
+  const displayName = profileName || "You";
+  const initials = displayName.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
   if (pathname.startsWith("/onboarding")) return null;
   return (
@@ -112,8 +115,8 @@ export function TopBar() {
             </button>
             <Popover open={menu === "account"} onClose={close} className="w-64">
               <div className="px-3 py-2">
-                <div className="text-sm font-medium">{siteConfig.user.firstName} {siteConfig.user.lastName}</div>
-                <div className="text-xs text-muted">{siteConfig.user.email}</div>
+                <div className="text-sm font-medium">{displayName}</div>
+                {company && <div className="text-xs text-muted">{company}</div>}
               </div>
               <div className="my-1 h-px bg-line" />
               {[
@@ -126,7 +129,7 @@ export function TopBar() {
                 </Link>
               ))}
               <div className="my-1 h-px bg-line" />
-              <button className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted hover:bg-hover hover:text-fg">
+              <button onClick={() => { close(); void logout(); }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted hover:bg-hover hover:text-fg">
                 <LogOut size={15} /> Log out
               </button>
             </Popover>

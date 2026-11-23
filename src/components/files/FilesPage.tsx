@@ -6,6 +6,8 @@ import { ChevronDown, FileSpreadsheet, FileText, FolderOpen, LayoutGrid, List, M
 import type { FileItem } from "@/lib/types";
 import { setState, uid, useStore } from "@/lib/store";
 import { Popover } from "@/components/ui/Popover";
+import { Markdown } from "@/components/chat/Markdown";
+import Link from "next/link";
 
 const SUPPORTED = ["pdf", "docx", "xlsx", "txt", "eml", "md"] as const;
 type Ext = (typeof SUPPORTED)[number];
@@ -87,6 +89,8 @@ export function FilesPage() {
         <button onClick={() => input.current?.click()} className="btn btn-cta"><Plus size={15} /> New</button>
         <input ref={input} type="file" multiple accept={SUPPORTED.map((s) => "." + s).join(",")} className="hidden" onChange={(e) => add(e.target.files)} />
       </div>
+
+      <CompanyBrief />
 
       <div className="mt-8 flex items-center gap-3">
         <label className="glass flex h-10 flex-1 items-center gap-2 rounded-xl px-3">
@@ -182,5 +186,29 @@ function FileCard({ f }: { f: FileItem }) {
       <div className="mt-0.5 text-[11px] text-muted">{f.type.toUpperCase()} · {fmt(f.sizeBytes)}</div>
       <button onClick={() => remove(f.id)} className="icon-btn absolute right-2 top-2 h-7 w-7 opacity-0 group-hover:opacity-100" aria-label="Delete"><Trash2 size={14} /></button>
     </motion.div>
+  );
+}
+
+/** The Company Brief written during onboarding: every agent reads it. Edited under Settings → Workspace. */
+function CompanyBrief() {
+  const brief = useStore((s) => s.brain.brief);
+  const company = useStore((s) => s.profile.companyName || s.workspace.company);
+  const [open, setOpen] = useState(false);
+  if (!brief) return null;
+  return (
+    <div className="glass mt-8 rounded-2xl p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.14em] text-faint">Company Brain</div>
+          <div className="mt-0.5 text-[15px] font-medium">Company Brief{company ? ` · ${company}` : ""}</div>
+          <div className="text-[12.5px] text-muted">Every agent reads this before it answers.</div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button onClick={() => setOpen((o) => !o)} className="btn btn-glass h-8 px-3 text-xs">{open ? "Hide" : "Show"}</button>
+          <Link href="/settings?section=Workspace" className="btn btn-glass h-8 px-3 text-xs">Edit</Link>
+        </div>
+      </div>
+      {open && <div className="mt-4 border-t border-line pt-4 text-[13.5px] leading-relaxed text-fg/90"><Markdown text={brief} /></div>}
+    </div>
   );
 }

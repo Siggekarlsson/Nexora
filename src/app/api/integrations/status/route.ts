@@ -1,10 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { INTEGRATIONS } from "@/data/integrations";
 import { gmailConfigured } from "@/lib/integrations/gmail";
 import { driveConfigured } from "@/lib/integrations/drive";
-import { shopifyConfigured } from "@/lib/integrations/shopify";
 import { readConn } from "@/lib/integrations/vault";
-import { ALL_APPS, appStatus, composioConfigured, describe, readUid, viaComposio, type AppId } from "@/lib/integrations/composio";
+import { appStatus, composioConfigured, describe, readUid, toolkitLogos, viaComposio } from "@/lib/integrations/composio";
 
+export type AppState = { connected: boolean; setup: boolean; account?: string | null };
+
+/**
+ * Connection state for every app on the Integrations page.
+ * `connected` is only true for a live connection (Composio, or Nexora's own Google OAuth when Composio is off).
+ * `setup` is true when the app can't be connected yet (no Composio toolkit, or it needs its own auth config).
+ */
 export async function GET(req: NextRequest) {
   const uid = readUid(req);
   const st =
@@ -14,23 +21,22 @@ export async function GET(req: NextRequest) {
           return null;
         })
       : null;
-  const composio = (id: AppId) => ({ via: "composio", configured: true, connected: !!st?.[id]?.connected, account: null });
+  const logos = composioConfigured()
+    ? await toolkitLogos().catch((e) => {
+        console.error("[composio] logos failed:", describe(e));
+        return {} as Record<string, string>;
+      })
+    : {};
 
-  const g = gmailConfigured() ? readConn(req, "gmail") : null;
-  const d = driveConfigured() ? readConn(req, "drive") : null;
-  const s = shopifyConfigured() ? readConn(req, "shopify") : null;
-  const others = Object.fromEntries(
-    ALL_APPS.filter((a) => a !== "gmail" && a !== "drive" && a !== "shopify").map((a) => [
-      a,
-      viaComposio(a) ? composio(a) : { via: "composio", configured: false, connected: false, account: null },
-    ]),
-  );
-  return NextResponse.json({
-    ...others,
-    gmail: viaComposio("gmail") ? composio("gmail") : { via: "oauth", configured: gmailConfigured(), connected: !!g, account: g?.email ?? null },
-    drive: viaComposio("drive") ? composio("drive") : { via: "oauth", configured: driveConfigured(), connected: !!d, account: d?.email ?? null },
-    shopify: viaComposio("shopify")
-      ? composio("shopify")
-      : { via: "oauth", configured: shopifyConfigured(), connected: !!s, account: s ? s.name ?? s.shop : null },
-  });
+  const g = !viaComposio("gmail") && gmailConfigured() ? readConn(req, "gmail") : null;
+  const d = !viaComposio("drive") && driveConfigured() ? readConn(req, "drive") : null;
+  const apps: Record<string, AppState> = {};
+  for (const a of INTEGRATIONS) {
+    if (a.category === "soon") continue;
+    if (viaComposio(a.id)) apps[a.id] = { connected: !!st?.[a.id]?.connected, setup: false };
+    else if (a.id === "gmail" && gmailConfigured()) apps[a.id] = { connected: !!g, setup: false, account: g?.email ?? null };
+    else if (a.id === "drive" && driveConfigured()) apps[a.id] = { connected: !!d, setup: false, account: d?.email ?? null };
+    else apps[a.id] = { connected: false, setup: true };
+  }
+  return NextResponse.json({ composio: composioConfigured(), apps, logos });
 }

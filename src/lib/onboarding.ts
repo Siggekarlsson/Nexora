@@ -59,3 +59,89 @@ export function restartOnboarding() {
 }
 
 export const isOnboarded = () => getState().onboarding.done;
+
+/** "What does {company} do?" choices for companies without a website. `icon` is a lucide icon name. */
+export const COMPANY_TYPES = [
+  { id: "dropshipping", label: "Dropshipping", icon: "Package" },
+  { id: "clothing", label: "Clothing brand", icon: "Shirt" },
+  { id: "creator", label: "Content creator", icon: "Video" },
+  { id: "ecommerce", label: "E-commerce store", icon: "ShoppingCart" },
+  { id: "agency", label: "Agency (marketing/design)", icon: "Palette" },
+  { id: "consulting", label: "Consulting", icon: "Briefcase" },
+  { id: "saas", label: "SaaS / software", icon: "Code" },
+  { id: "restaurant", label: "Restaurant or café", icon: "Coffee" },
+  { id: "local", label: "Local service business", icon: "Wrench" },
+  { id: "coaching", label: "Coaching or courses", icon: "GraduationCap" },
+  { id: "realestate", label: "Real estate", icon: "Home" },
+  { id: "finance", label: "Finance / investing", icon: "LineChart" },
+] as const;
+
+export const companyTypeLabel = (id: string) => COMPANY_TYPES.find((t) => t.id === id)?.label ?? id;
+
+/** Helper questions shown as chips above the "Let Company Brain get to know you" text box. */
+export function describeHints(type: string): { questions: string[]; placeholder: string } {
+  switch (type) {
+    case "clothing":
+      return {
+        questions: ["What kind of clothes do you sell?", "Who is your customer?", "Where do you sell (own store, Instagram, Zalando…)?", "How do you market today?"],
+        placeholder: "We sell minimalist streetwear for 18–30 year olds, mostly through our own Shopify store and Instagram…",
+      };
+    case "dropshipping":
+      return {
+        questions: ["What products/niche?", "Which store platform?", "Where do your ads run?", "Average order value and margin?"],
+        placeholder: "We sell pet accessories through a Shopify store, with ads on TikTok and Meta…",
+      };
+    case "creator":
+      return {
+        questions: ["Which platforms and niche?", "How do you make money (sponsors, ads, products)?", "How often do you post?"],
+        placeholder: "I make fitness videos on YouTube and TikTok, and earn from sponsors and my own training program…",
+      };
+    default:
+      return {
+        questions: ["What do you sell?", "Who are your customers?", "How do you make money?", "How do you find new customers?"],
+        placeholder: "We help small companies with… Our customers are… We make money by…",
+      };
+  }
+}
+
+const COMMERCE_HELP = [
+  "Keep an eye on my email and answer customers",
+  "Track how sales are going",
+  "Suggest ads and marketing ideas",
+  "Write product descriptions and posts",
+  "Chase invoices and keep track of money",
+  "Find answers in my docs",
+];
+const CREATOR_HELP = [
+  "Answer brand and sponsor emails",
+  "Track views, followers and income",
+  "Suggest content ideas",
+  "Write posts, captions and scripts",
+  "Keep track of deals, invoices and money",
+  "Find answers in my docs",
+];
+const SERVICE_HELP = [
+  "Keep an eye on my email and answer clients",
+  "Follow up on leads and calls",
+  "Write proposals, posts and marketing",
+  "Track sales and bookings",
+  "Chase invoices and keep track of money",
+  "Find answers in my docs",
+];
+const RESTAURANT_HELP = [
+  "Answer guest emails and bookings",
+  "Track sales and costs",
+  "Suggest marketing ideas and offers",
+  "Write menus, posts and descriptions",
+  "Keep track of suppliers and invoices",
+  "Find answers in my docs",
+];
+
+/** "How should Nexora help you?" choices, shaped by the company type. */
+export function helpOptions(type: string): string[] {
+  if (["clothing", "dropshipping", "ecommerce"].includes(type)) return COMMERCE_HELP;
+  if (type === "creator") return CREATOR_HELP;
+  if (type === "restaurant") return RESTAURANT_HELP;
+  if (["agency", "consulting", "local", "coaching", "realestate"].includes(type)) return SERVICE_HELP;
+  return GOALS;
+}

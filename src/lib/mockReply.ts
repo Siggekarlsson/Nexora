@@ -1,9 +1,22 @@
 import type { DepartmentId } from "./types";
 import { departmentName } from "@/data/departments";
+import type { PromptContext } from "./agents";
 
 /** Offline fallback used when no ANTHROPIC_API_KEY is configured. */
-export function mockReply(agent: DepartmentId, text: string, skillName?: string, docCount = 0): string {
+export function mockReply(agent: DepartmentId, text: string, skillName?: string, docCount = 0, profile?: PromptContext["profile"], brief?: string): string {
   const name = departmentName(agent);
+  // Questions about the company are answered from the onboarding profile, even without an AI key.
+  if (!skillName && (profile?.companyName || brief) && /(f[öo]retag|company|business|om oss|about us|vet du)/i.test(text)) {
+    const rows = [
+      profile?.companyName && `- **Company:** ${profile.companyName}`,
+      profile?.companyType && `- **Type:** ${profile.companyType}`,
+      profile?.whatWeDo && `- **What you do:** ${profile.whatWeDo}`,
+      profile?.howWeMakeMoney && `- **How you make money:** ${profile.howWeMakeMoney}`,
+      profile?.goals?.length && `- **What you want help with:** ${profile.goals.join(", ")}`,
+      profile?.apps?.length && `- **Apps you use:** ${profile.apps.join(", ")}`,
+    ].filter(Boolean);
+    return `Here is what I know about ${profile?.companyName || "your company"} so far:\n\n${rows.join("\n")}${brief ? `\n\n### Company Brief\n${brief}` : ""}`;
+  }
   if (skillName) {
     return `**${skillName}** is set up and ready to run.\n\nTo get started I need a couple of details:\n- Which company or client is this for?\n- Any deadline or format you want (one-pager, email, slide)?\n\nOnce I have that, I will pull what we have in the brain, draft it and list the sources I used.`;
   }

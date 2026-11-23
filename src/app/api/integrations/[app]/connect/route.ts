@@ -6,5 +6,5 @@ import { origin } from "@/lib/integrations/vault";
 export async function GET(req: NextRequest, { params }: { params: Promise<{ app: string }> }) {
   const { app } = await params;
   if (isAppId(app) && viaComposio(app)) return composioConnect(req, app, origin(req));
-  return NextResponse.redirect(`${origin(req)}${returnPath(req.nextUrl.searchParams.get("next"))}?error=not_configured`);
+  return NextResponse.redirect(`${origin(req)}${returnPath(req.nextUrl.searchParams.get("next"))}?error=${isAppId(app) ? app : "app"}_not_configured`);
 }
