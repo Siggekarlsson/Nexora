@@ -34,6 +34,23 @@ type Body = {
 /** Room for one wait-and-retry after a rate limit (Groq asks for up to 20 s). */
 export const maxDuration = 60;
 
+/** Questions that need current or public information from the web. */
+const WEB = /\b(webb(en)?|internet|nätet|googla|sök (på|efter)|search the web|nyheter|news|vd|ceo|grundare|founder|kontaktuppgift\w*|e-?postadress\w*|mejladress\w*|telefonnummer|hemsida|webbplats|website|kvartalsrapport\w*|delårsrapport\w*|årsredovisning\w*|quarterly report|aktiekurs\w*|share price|leta upp|look up|vem är|who is)\b/i;
+
+/** Pulls the ```nexora-email draft out of the reply, so the chat can show it as an email card. */
+function extractDraft(content: string) {
+  const m = /```nexora-email\s*([\s\S]*?)```/i.exec(content);
+  if (!m) return { text: content, draft: null };
+  try {
+    const d = JSON.parse(m[1].trim()) as Record<string, unknown>;
+    const s = (v: unknown) => (typeof v === "string" ? v : Array.isArray(v) ? v.join(", ") : "");
+    const draft = { to: s(d.to), cc: s(d.cc), subject: s(d.subject), body: s(d.body), threadId: s(d.threadId ?? d.thread_id) || undefined };
+    return { text: content.replace(m[0], "").trim() || "Here is a draft. Check it and click Skicka when it looks right.", draft };
+  } catch {
+    return { text: content, draft: null };
+  }
+}
+
 const GROQ_URL = "https://api.groq.com/openai/v1";
 const GROQ_DEFAULT = "llama-3.3-70b-versatile";
 
@@ -89,6 +106,8 @@ export async function POST(req: NextRequest) {
       // thousand. So for Groq: no tools, app data fetched up front and kept short, a shorter prompt and
       // only the latest 6 messages.
       const compact = p === "groq";
+      // Groq has no web search tool; its "groq/compound" model searches the web itself, so questions that need the web go there.
+      const web = compact && WEB.test(last);
       const { context, gmail, drive } = await integrationContext(req, last, compact);
       const uid = readUid(req);
       const agent =
@@ -99,13 +118,13 @@ export async function POST(req: NextRequest) {
             })
           : null;
       const system =
-        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic", brief: body.brief, profile: body.profile, departments: body.departments, compact }) +
+        systemPrompt(body.agent, { skillName: body.skillName, company: body.company, about: body.about, docs: body.docs, webSearch: p === "anthropic" || web, brief: body.brief, profile: body.profile, departments: body.departments, compact }) +
         context +
         (agent?.prompt ?? "");
       const history = compact ? recent(messages, 6) : messages;
-      const raw = p === "anthropic" ? await anthropic(system, history, agent) : await groq(system, history, agent);
-      const content = stripEcho(raw, last);
-      const res = NextResponse.json({ content, provider: p });
+      const raw = p === "anthropic" ? await anthropic(system, history, agent) : web ? await groqWeb(system, history) : await groq(system, history, agent);
+      const { text, draft } = extractDraft(stripEcho(raw, last));
+      const res = NextResponse.json({ content: text, provider: p, ...(draft ? { draft } : {}) });
       if (gmail) writeConn(res, "gmail", gmail);
       if (drive) writeConn(res, "drive", drive);
       return res;
@@ -197,6 +216,19 @@ async function groq(system: string, messages: Msg[], agent: Agent) {
   return "I looked through your connected apps but could not finish the answer. Try a narrower question.";
 }
 
+/** Groq's compound model, which runs web search on Groq's side. */
+async function groqWeb(system: string, messages: Msg[]) {
+  const key = clean(process.env.GROQ_API_KEY)!;
+  try {
+    const msg = await groqCall(key, "groq/compound", [{ role: "system", content: system }, ...messages], undefined, () => {});
+    return (msg.content as string) || "Webbsökningen gav inget svar just nu. Försök igen om en stund.";
+  } catch (e) {
+    if (e instanceof BusyError) throw e;
+    console.error("[groq] web search failed:", e instanceof Error ? e.message : e);
+    return `Webbsökningen fungerade inte just nu (${e instanceof Error ? e.message : "okänt fel"}). Försök igen om en stund.`;
+  }
+}
+
 async function groqCall(key: string, model: string, convo: GroqMsg[], tools: FnTool[] | undefined, setModel: (m: string) => void) {
   const call = (m: string) =>
     fetch(`${GROQ_URL}/chat/completions`, {
@@ -209,7 +241,8 @@ async function groqCall(key: string, model: string, convo: GroqMsg[], tools: FnT
   let data = await res.json().catch(() => ({}));
 
   // If the model was retired or renamed, pick another available chat model and retry once.
-  if (!res.ok && (res.status === 404 || res.status === 400) && /model/i.test(JSON.stringify(data))) {
+  // (Not for groq/compound: another model would answer without searching the web.)
+  if (!res.ok && model !== "groq/compound" && (res.status === 404 || res.status === 400) && /model/i.test(JSON.stringify(data))) {
     const fallback = await groqFallbackModel(key);
     if (fallback) {
       setModel(fallback);

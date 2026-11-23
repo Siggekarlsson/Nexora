@@ -3,9 +3,43 @@ import { freshGmail, gmailConfigured, recentMail } from "./gmail";
 import { driveConfigured, fileText, freshDrive, isReadable, recentFiles } from "./drive";
 import { shopifyConfigured, shopSnapshot } from "./shopify";
 import { readConn, type DriveConn, type GmailConn } from "./vault";
-import { composioConfigured, composioContext, readUid, viaComposio } from "./composio";
+import { composioConfigured, composioContext, readUid, viaComposio, type MailSearch } from "./composio";
 
-const MAIL = /\b(e-?mail|mail|mejl|e-?post|inbox|inkorg|gmail|brev|svara|reply|correspondence)/i;
+const MAIL = /\b(e-?mail|mail|mejl|e-?post|inbox|inkorg|gmail|brev|svara|reply|replied|correspondence|skrivit|skrev|skickade|skickat|wrote|sent)/i;
+
+/** Words that never make a useful Gmail search term. */
+const STOP = new Set(
+  ("vad vem vilka vilken vilket när hur var varför har hade jag mig min mitt mina du dig din ditt vi oss vår våra han hon de dem " +
+    "till från av om med för på i och eller att det den detta dessa som en ett något några alla allt mycket senaste senast idag igår " +
+    "mejl mejlet mejlen mail mailet mailen mails e-post epost e-mail email emails inkorg inkorgen gmail brev " +
+    "skrivit skrev svarade svarat svar skickade skickat skicka fått fick få läs läsa visa sammanfatta kolla leta hitta sök söka " +
+    "nya nytt ny gamla senare sist kan kunde ska skulle vill ville finns fanns upp skriv själv ämnet ämne åt " +
+    "vd vdn ceo e-postadress e-postadressen mejladress mailadress adress kontakt kontaktuppgifter telefon nummer " +
+    "the a an what who which when how did do does have has had i me my mine you your we our from to about with for on in of and or " +
+    "latest recent last today yesterday email reply replied sent send wrote write read show summarise summarize find search new").split(" "),
+);
+
+/**
+ * Builds a Gmail search from the question, for models that can't search themselves (Groq):
+ * addresses and domains, plus names and companies. "What did I reply/send" also searches sent mail.
+ */
+export function mailSearch(text: string): MailSearch {
+  const terms: string[] = [];
+  for (const m of text.matchAll(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g)) terms.push(m[0]);
+  for (const m of text.matchAll(/\b(?:[\w-]+\.)+(?:se|com|fi|no|dk|io|ai|net|org|eu|de|co|app)\b/gi)) if (!terms.some((t) => t.includes(m[0]))) terms.push(m[0]);
+  const words = text.replace(/[\w.+-]+@[\w.-]+/g, " ").match(/[\p{L}\p{N}][\p{L}\p{N}&'-]*/gu) ?? [];
+  for (const w of words) {
+    const lw = w.toLowerCase().replace(/:\w*$/, "");
+    if (STOP.has(lw) || terms.some((t) => t.toLowerCase().includes(lw))) continue;
+    if (lw.length >= 3 || /\d/.test(lw)) terms.push(w);
+  }
+  const pickd = [...new Set(terms.map((t) => t.toLowerCase()))].slice(0, 3);
+  const sent = /(svarade|skickade|skrev)\s+(jag|vi)|(har|hade)\s+(jag|vi)\s+(svarat|skickat|skrivit)|mitt svar|vårt svar|did (i|we) (reply|send|write|answer)|i (replied|sent|wrote)|in:sent|skickat|skickade/i.test(text);
+  if (!pickd.length) return {};
+  const query = pickd.length === 1 ? quote(pickd[0]) : `{${pickd.map(quote).join(" ")}}`;
+  return { query, sent };
+}
+const quote = (t: string) => (/\s/.test(t) ? `"${t}"` : t);
 const FILES = /\b(fil|file|dokument|document|doc|rapport|report|drive|modell|model|memo|pm|anteckning|notes?)/i;
 const SHOP = /\b(shopify|order|ordrar|beställning|butik|shop|store|produkt|product|lager|inventory|försäljning|sales|revenue|intäkt)/i;
 
@@ -22,7 +56,7 @@ export async function integrationContext(req: NextRequest, text: string, compact
     const uid = readUid(req);
     if (uid) {
       try {
-        parts.push(...(await composioContext(uid, { gmail: MAIL.test(text), drive: FILES.test(text), shopify: SHOP.test(text) }, compact)));
+        parts.push(...(await composioContext(uid, { gmail: MAIL.test(text) || !!mailSearch(text).query, drive: FILES.test(text), shopify: SHOP.test(text) }, compact, mailSearch(text))));
       } catch (e) {
         parts.push(`The user's connected apps could not be reached (${(e as Error).message}). Tell the user.`);
       }

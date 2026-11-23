@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus, Sparkles, Wand2 } from "lucide-react";
-import type { ChatMessage, DepartmentId, Thread } from "@/lib/types";
+import type { ChatMessage, DepartmentId, EmailDraft, Thread } from "@/lib/types";
 import { agentOrder, departmentColors, departmentName } from "@/data/departments";
 import { skillById as builtIn } from "@/data/tree";
 import { agentContext, getState, setState, uid, useStore } from "@/lib/store";
@@ -13,6 +13,7 @@ import { routeMessage } from "@/lib/routing";
 import { PixelAvatar } from "@/components/brand/PixelAvatar";
 import { Composer, type ComposerTarget } from "./Composer";
 import { Markdown } from "./Markdown";
+import { EmailCard } from "./EmailCard";
 import { siteConfig } from "@/config/site";
 
 const suggestions = [
@@ -23,7 +24,7 @@ const suggestions = [
 
 const findSkill = (id?: string | null) => (id ? builtIn[id] ?? getState().customSkills.find((s) => s.id === id) : undefined);
 
-async function askAgent(thread: Thread): Promise<string> {
+async function askAgent(thread: Thread): Promise<{ content: string; draft?: EmailDraft }> {
   const skill = findSkill(thread.skillId);
   const res = await fetch("/api/chat", {
     method: "POST",
@@ -36,7 +37,8 @@ async function askAgent(thread: Thread): Promise<string> {
     }),
   });
   const data = await res.json().catch(() => null);
-  return (data?.content as string) || `The agent couldn't answer (server error ${res.status}).`;
+  const content = (data?.content as string) || `The agent couldn't answer (server error ${res.status}).`;
+  return { content, ...(data?.draft ? { draft: { ...(data.draft as EmailDraft), status: "open" as const } } : {}) };
 }
 
 function updateThread(id: string, fn: (t: Thread) => Thread) {
@@ -82,7 +84,7 @@ export function ChatApp() {
       updateThread(t.id, (cur) => ({
         ...cur,
         updatedAt: new Date().toISOString(),
-        messages: [...cur.messages, { id: uid(), role: "assistant", content: reply, createdAt: new Date().toISOString(), departmentId: cur.departmentId }],
+        messages: [...cur.messages, { id: uid(), role: "assistant", content: reply.content, draft: reply.draft, createdAt: new Date().toISOString(), departmentId: cur.departmentId }],
       }));
     } finally {
       setPending(null);
@@ -277,6 +279,12 @@ function ThreadView({ thread, pending, onSend }: { thread: Thread; pending: bool
                 <div className="min-w-0 flex-1">
                   <div className="mb-0.5 text-[12px] font-medium" style={{ color }}>{departmentName(thread.departmentId)}</div>
                   {m.id === lastAssistant ? <Reveal text={m.content} /> : <Markdown text={m.content} />}
+                  {m.draft && (
+                    <EmailCard
+                      draft={m.draft}
+                      onChange={(draft) => updateThread(thread.id, (cur) => ({ ...cur, messages: cur.messages.map((x) => (x.id === m.id ? { ...x, draft } : x)) }))}
+                    />
+                  )}
                 </div>
               </motion.div>
             ),
