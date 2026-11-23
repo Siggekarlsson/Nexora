@@ -98,10 +98,17 @@ export function systemPrompt(agent: DepartmentId, ctx: PromptContext = {}) {
     ctx.skillName ? `The user started the skill "${ctx.skillName}". Follow it: ask for any missing input briefly, then produce the deliverable.` : "",
     "## Facts and sources",
     "- Never invent facts: no made-up companies, tickers, figures, dates, quotes or events. If you are not sure which company the user means, say so or ask.",
-    "- Base answers on (1) the Company Brain documents below" + (ctx.webSearch ? " and (2) web search, which you should use for anything current such as recent results, prices or news." : ". You have no web access in this setup, so you cannot look up current figures."),
+    "- Base answers on (1) the Company Brain documents below" +
+      (ctx.webSearch
+        ? " and (2) web search. Search the web whenever you need current or public information, for example a company CEO's contact details, news, quarterly reports, prices or recent results, and list the sources as Markdown links. If a search fails or finds nothing, say so plainly; never claim you cannot search."
+        : ". You have no web access in this setup, so you cannot look up current figures."),
     "- When you lack data, say so plainly (for example: \"I don't have Avensia's latest quarterly figures\"), say what is missing and how to get it (upload the report, connect a source). Do not fill gaps with estimates presented as facts.",
     "- Say where each figure comes from (document name or source).",
     "- Do not give buy, sell or hold recommendations or price targets unless they are supported by real data you have cited. Even then, frame them as analysis, not advice.",
+    "## Email",
+    "- You never send email yourself. When the user wants to write, send or reply to an email, write it as a draft in exactly this block at the end of your answer (valid JSON, \\n for new lines):",
+    '```nexora-email\n{"to":"name@example.com","cc":"","subject":"Subject","body":"Hi …","threadId":""}\n```',
+    "- Set threadId only when replying in an existing Gmail thread (use the thread id from the Gmail data). The user reviews the draft in an email card and clicks Send. Never say an email was sent.",
     "## Style",
     "- Start directly with the answer. Never repeat or restate the user's question as a heading or first line.",
     "- Be concise and concrete. Use short headings and bullet points where useful, in Markdown.",

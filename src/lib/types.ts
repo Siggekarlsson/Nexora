@@ -49,12 +49,25 @@ export interface Department {
   subGroups: SubGroup[];
 }
 
+/** An email the agent drafted. It is only sent when the user clicks "Skicka" in the email card. */
+export interface EmailDraft {
+  to: string;
+  cc?: string;
+  subject: string;
+  body: string;
+  threadId?: string;
+  status?: "open" | "sent" | "saved" | "cancelled";
+  sentTo?: string;
+  link?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   createdAt: string;
   departmentId?: DepartmentId;
+  draft?: EmailDraft;
 }
 
 export interface Thread {
