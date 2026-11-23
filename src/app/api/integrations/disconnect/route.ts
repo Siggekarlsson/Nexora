@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { clearConn, type IntegrationId } from "@/lib/integrations/vault";
-import { disconnect, isAppId, readUid, viaComposio } from "@/lib/integrations/composio";
+import { describe, disconnect, isAppId, readUid, viaComposio } from "@/lib/integrations/composio";
 
 export async function POST(req: NextRequest) {
   const { id } = (await req.json()) as { id: unknown };
@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
   if (viaComposio(id) && uid) {
     try {
       await disconnect(uid, id);
-    } catch {
+    } catch (e) {
+      console.error(`[composio] disconnect ${id} failed:`, describe(e));
       return NextResponse.json({ ok: false }, { status: 502 });
     }
   }

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const uid = readUid(req);
   const st =
     composioConfigured() && uid
-      ? await appStatus(uid).catch((e) => {
+      ? await appStatus(uid, { labels: true }).catch((e) => {
           console.error("[composio] status failed:", describe(e));
           return null;
         })
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const apps: Record<string, AppState> = {};
   for (const a of INTEGRATIONS) {
     if (a.category === "soon") continue;
-    if (viaComposio(a.id)) apps[a.id] = { connected: !!st?.[a.id]?.connected, setup: false };
+    if (viaComposio(a.id)) apps[a.id] = { connected: !!st?.[a.id]?.connected, setup: false, account: st?.[a.id]?.account ?? null };
     else if (a.id === "gmail" && gmailConfigured()) apps[a.id] = { connected: !!g, setup: false, account: g?.email ?? null };
     else if (a.id === "drive" && driveConfigured()) apps[a.id] = { connected: !!d, setup: false, account: d?.email ?? null };
     else apps[a.id] = { connected: false, setup: true };

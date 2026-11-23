@@ -55,15 +55,27 @@ export function ensureUid(req: NextRequest, res: NextResponse) {
   return uid;
 }
 
-/** Reuses this user's Composio session while the server instance lives, instead of creating one per request. */
+/**
+ * Reuses this user's Composio session while the server instance lives, instead of creating one per request.
+ * The key includes the user's active account ids, so a new or removed connection gets a fresh session
+ * (also on other server instances) and the chat sees the new tools straight away.
+ */
 const sessions = new Map<string, string>();
-async function session(uid: string) {
-  const id = sessions.get(uid);
+/** Drops this user's cached sessions, after a connection was created or removed. */
+export function forgetSession(uid: string) {
+  for (const k of [...sessions.keys()]) if (k === uid || k.startsWith(`${uid}|`)) sessions.delete(k);
+  accountCache.delete(uid);
+}
+
+async function session(uid: string, accounts?: Record<string, string>) {
+  const pinned = accounts && Object.keys(accounts).length ? accounts : undefined;
+  const cacheKey = pinned ? `${uid}|${Object.entries(pinned).sort().map(([k, v]) => `${k}=${v}`).join(",")}` : uid;
+  const id = sessions.get(cacheKey);
   if (id) {
     try {
       return await composio().use(id);
     } catch {
-      sessions.delete(uid);
+      sessions.delete(cacheKey);
     }
   }
   const sac = shopifyAuthConfig();
@@ -71,6 +83,8 @@ async function session(uid: string) {
     composio().create(uid, {
       toolkits: composioApps().map((a) => TOOLKIT[a]),
       ...(sac ? { authConfigs: { shopify: sac } } : {}),
+      // Use the newest active account for each connected toolkit, so tools never pick an old duplicate.
+      ...(pinned ? { connectedAccounts: pinned } : {}),
       // Agents only read for now: no creating, updating or deleting in the user's apps.
       tags: { disable: ["createHint", "updateHint", "destructiveHint"] },
       workbench: { enable: false },
@@ -90,31 +104,119 @@ async function session(uid: string) {
     }
   }
   if (sessions.size > 5000) sessions.clear();
-  sessions.set(uid, s.sessionId);
+  sessions.set(cacheKey, s.sessionId);
   return s;
+}
+
+/** The user's session, pinned to the newest active account of each connected toolkit. */
+async function userSession(uid: string) {
+  const active = await activeAccounts(uid);
+  return session(uid, Object.fromEntries([...active].map(([slug, a]) => [slug, a.id])));
 }
 
 /** Starts a sign-in and returns the URL to send the browser to. */
 export async function connectUrl(uid: string, app: AppId, callbackUrl: string) {
-  const s = await session(uid);
+  const s = await userSession(uid);
   const req = await s.authorize(TOOLKIT[app], { callbackUrl });
   if (!req.redirectUrl) throw new Error("Composio returned no sign-in link");
   return req.redirectUrl;
 }
 
-type AppStatus = { connected: boolean; accountId?: string; logo?: string };
+type AppStatus = { connected: boolean; accountId?: string; account?: string | null };
+type Account = { id: string; slug: string; createdAt: string; label: string | null };
+
+/** Short cache of the user's active accounts, so one chat message does not list them several times. */
+const accountCache = new Map<string, { at: number; accounts: Map<string, Account> }>();
+
+/** Every ACTIVE connected account this user has in Composio, read straight from the connected accounts API. */
+async function listActive(uid: string) {
+  const all: Account[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const r = await composio().connectedAccounts.list({ userIds: [uid], statuses: ["ACTIVE"], limit: 100, ...(cursor ? { cursor } : {}) });
+    for (const a of r.items) all.push({ id: a.id, slug: a.toolkit.slug, createdAt: a.createdAt, label: accountLabel(a) });
+    cursor = r.nextCursor ?? undefined;
+    if (!cursor) break;
+  }
+  return all;
+}
+
+/** An email or name Composio keeps for the account, if any. */
+function accountLabel(a: { alias?: string | null; data?: Record<string, unknown>; state?: unknown }): string | null {
+  const keys = ["email", "user_email", "email_address", "emailAddress", "username", "user_name", "name", "account_name"];
+  const look = (o: unknown): string | null => {
+    if (!o || typeof o !== "object") return null;
+    const r = o as Record<string, unknown>;
+    for (const k of keys) if (typeof r[k] === "string" && r[k]) return r[k] as string;
+    for (const v of Object.values(r)) if (v && typeof v === "object" && !Array.isArray(v)) {
+      const hit = look(v);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  return look(a.state) ?? look(a.data) ?? (a.alias || null);
+}
+
+/**
+ * The newest ACTIVE account per toolkit slug. Older duplicates (one per earlier Connect click)
+ * are deleted from Composio, so tools and status always use one account.
+ */
+async function activeAccounts(uid: string): Promise<Map<string, Account>> {
+  const hit = accountCache.get(uid);
+  if (hit && Date.now() - hit.at < 5_000) return hit.accounts;
+  let list: Account[];
+  try {
+    list = await listActive(uid);
+  } catch (e) {
+    console.error("[composio] list connected accounts failed:", describe(e));
+    throw e;
+  }
+  list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const newest = new Map<string, Account>();
+  const old: Account[] = [];
+  for (const a of list) {
+    if (newest.has(a.slug)) old.push(a);
+    else newest.set(a.slug, a);
+  }
+  if (old.length) {
+    const removed = await Promise.allSettled(old.map((a) => composio().connectedAccounts.delete(a.id)));
+    removed.forEach((r, i) => r.status === "rejected" && console.error(`[composio] delete duplicate ${old[i].slug} ${old[i].id} failed:`, describe(r.reason)));
+    console.warn(`[composio] removed ${removed.filter((r) => r.status === "fulfilled").length} duplicate account(s): ${[...new Set(old.map((a) => a.slug))].join(", ")}`);
+  }
+  if (accountCache.size > 5000) accountCache.clear();
+  accountCache.set(uid, { at: Date.now(), accounts: newest });
+  return newest;
+}
+
+/** Gmail account email, looked up once per account when Composio keeps no label for it. */
+const gmailEmails = new Map<string, string | null>();
+async function gmailEmail(uid: string, accountId: string) {
+  if (gmailEmails.has(accountId)) return gmailEmails.get(accountId) ?? null;
+  try {
+    const d = await run(await userSession(uid), "GMAIL_GET_PROFILE", { user_id: "me" });
+    const email = str(d.emailAddress ?? (d.response_data as Record<string, unknown> | undefined)?.emailAddress) || null;
+    gmailEmails.set(accountId, email);
+    return email;
+  } catch (e) {
+    console.error("[composio] gmail profile failed:", describe(e));
+    return null;
+  }
+}
 
 /** Apps Composio can connect right now (after the first session has been created). */
 export const availableApps = () => (composioConfigured() ? composioApps() : []);
 
-/** Which of the apps this user has an active connection for, plus the logo Composio has for each toolkit. */
-export async function appStatus(uid: string): Promise<Partial<Record<AppId, AppStatus>>> {
-  const items = await toolkitItems(await session(uid));
+/** Which of the apps this user has an ACTIVE connected account for, with the account's email or name. */
+export async function appStatus(uid: string, opts: { labels?: boolean } = {}): Promise<Partial<Record<AppId, AppStatus>>> {
+  // Creating a session (cached) is how Nexora learns which toolkits need their own auth config ("Setup needed").
+  await session("nexora_catalog").catch((e) => console.error("[composio] catalog session failed:", describe(e)));
+  const active = await activeAccounts(uid);
   const out: Partial<Record<AppId, AppStatus>> = {};
-  for (const app of composioApps()) {
-    const item = items.find((i) => i.slug === TOOLKIT[app]);
-    out[app] = { connected: !!item?.connection?.isActive, accountId: item?.connection?.connectedAccount?.id, logo: item?.logo };
+  for (const app of ALL_APPS) {
+    const acc = active.get(TOOLKIT[app]);
+    out[app] = { connected: !!acc, accountId: acc?.id, account: acc?.label ?? null };
   }
+  if (opts.labels && out.gmail?.connected && !out.gmail.account) out.gmail.account = await gmailEmail(uid, out.gmail.accountId!);
   return out;
 }
 
@@ -160,9 +262,37 @@ export async function toolkitLogos(): Promise<Record<string, string>> {
 /** Apps whose toolkit needs an auth config made with your own app (known after the first session). */
 export const setupNeeded = () => [...needsOwnApp];
 
+/** Removes every account this user has for the app's toolkit (active or not) and drops the cached session. */
 export async function disconnect(uid: string, app: AppId) {
-  const accountId = (await appStatus(uid))[app]?.accountId;
-  if (accountId) await composio().connectedAccounts.delete(accountId);
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const r = await composio().connectedAccounts.list({ userIds: [uid], toolkitSlugs: [TOOLKIT[app]], limit: 100, ...(cursor ? { cursor } : {}) });
+    ids.push(...r.items.map((a) => a.id));
+    cursor = r.nextCursor ?? undefined;
+    if (!cursor) break;
+  }
+  const results = await Promise.allSettled(ids.map((id) => composio().connectedAccounts.delete(id)));
+  forgetSession(uid);
+  const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+  if (failed.length) {
+    failed.forEach((r) => console.error(`[composio] disconnect ${app} failed:`, describe(r.reason)));
+    throw failed[0].reason;
+  }
+}
+
+/** True when the given connected account exists, belongs to this user and is ACTIVE. */
+export async function accountIsActive(uid: string, app: AppId, accountId: string | null) {
+  forgetSession(uid);
+  if (accountId) {
+    try {
+      const a = await composio().connectedAccounts.get(accountId);
+      return a.status === "ACTIVE" && a.toolkit.slug === TOOLKIT[app];
+    } catch (e) {
+      console.error(`[composio] check account ${accountId} failed:`, describe(e));
+    }
+  }
+  return !!(await activeAccounts(uid)).get(TOOLKIT[app]);
 }
 
 /** Runs one Composio tool as this user and returns its data, or throws with the reason. */
@@ -195,7 +325,7 @@ export async function composioContext(uid: string, want: Partial<Record<AppId, b
   const apps = composioApps();
   if (!apps.some((a) => want[a])) return [];
   const status = await appStatus(uid);
-  const s = await session(uid);
+  const s = await userSession(uid);
   const parts: string[] = [];
 
   if (want.gmail && status.gmail?.connected) {
@@ -290,6 +420,11 @@ export async function composioConnect(req: NextRequest, app: AppId, appOrigin: s
   const res = NextResponse.redirect(`${appOrigin}${back}`);
   try {
     const uid = ensureUid(req, res);
+    // Already connected: no new sign-in, so Composio never gets a duplicate account.
+    if (readUid(req) && (await activeAccounts(uid)).get(TOOLKIT[app])) {
+      res.headers.set("location", `${appOrigin}${back}?connected=${app}`);
+      return res;
+    }
     const next = back === "/integrations" ? "" : `&next=${encodeURIComponent(back)}`;
     const url = await connectUrl(uid, app, `${appOrigin}/api/integrations/composio/callback?app=${app}${next}`);
     res.headers.set("location", url);
@@ -326,7 +461,7 @@ export async function agentTools(uid: string) {
   const status = await appStatus(uid);
   const connected = (Object.keys(status) as AppId[]).filter((a) => status[a]?.connected);
   if (!connected.length) return null;
-  const s = await session(uid);
+  const s = await userSession(uid);
   const all = (await s.tools()) as unknown as FnTool[];
   const tools = all.filter((t) => META.has(t.function?.name));
   const run = async (name: string, args: Record<string, unknown>) => {
