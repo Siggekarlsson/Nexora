@@ -59,7 +59,9 @@ export function CommandPalette() {
         searchOnly: true,
       })),
     ],
-    [threads, customSkills],
+    // paletteOpen: rebuild on open, so departments and skills from the onboarding tree (applied after first render) are searchable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [threads, customSkills, paletteOpen],
   );
 
   const needle = q.trim().toLowerCase();
