@@ -159,7 +159,7 @@ function fallback(company: string, answer: string, goals: string[], type = "", m
   const brief =
     `**${company}**${type ? ` · ${type}` : ""}\n\n${answer || "No description yet. Add one under Settings, Workspace, or tell the Company Brain about the business in chat."}` +
     (money ? `\n\n**How we make money:** ${money}` : "") +
-    (goals.length ? `\n\n**What Nexora should help with:** ${goals.join(", ")}.` : "");
+    (goals.length ? `\n\n**What Sigge McDulle should help with:** ${goals.join(", ")}.` : "");
   const audit = goals.length
     ? goals.map((g) => `- **${g}**: a ready skill in your tree covers this. Run it once and tune it from the result.`).join("\n")
     : "- Start with the Company Brain: upload a few key documents so every answer uses your facts.";

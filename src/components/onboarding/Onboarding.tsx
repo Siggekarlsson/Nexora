@@ -287,7 +287,7 @@ export function Onboarding() {
               )}
               {d.step === "goals" && (
                 <>
-                  <Question title="How should Nexora help you?" sub="Pick as many as apply." />
+                  <Question title="How should Sigge McDulle help you?" sub="Pick as many as apply." />
                   <div className="grid w-full max-w-[620px] grid-cols-2 gap-2.5">
                     {helpOptions(d.companyType).map((g) => (
                       <ChoiceCard key={g} kind="check" selected={d.goals.includes(g)} onClick={() => update({ goals: toggle(d.goals, g) })}>{g}</ChoiceCard>
@@ -297,7 +297,7 @@ export function Onboarding() {
                     </ChoiceCard>
                     {d.goals.includes(OTHER) && (
                       <div className="col-span-2">
-                        <Input value={d.goalOther} onChange={(v) => update({ goalOther: v })} placeholder="What else should Nexora help with?" autoFocus wide />
+                        <Input value={d.goalOther} onChange={(v) => update({ goalOther: v })} placeholder="What else should Sigge McDulle help with?" autoFocus wide />
                       </div>
                     )}
                   </div>

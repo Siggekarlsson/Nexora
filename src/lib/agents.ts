@@ -56,7 +56,7 @@ function profileBlock(ctx: PromptContext) {
     `- Website: ${p.hasWebsite && p.website ? p.website : "none"}`,
     p.whatWeDo && `- What they do and sell: ${p.whatWeDo.slice(0, c ? 500 : 2000)}`,
     p.howWeMakeMoney && `- How they make money: ${p.howWeMakeMoney.slice(0, c ? 200 : 1000)}`,
-    p.goals?.length && `- What Nexora should help with: ${p.goals.join("; ")}`,
+    p.goals?.length && `- What Sigge McDulle should help with: ${p.goals.join("; ")}`,
     p.name && `- The user: ${p.name}${p.role ? `, ${p.role}` : ""}`,
     p.apps?.length && `- Apps the team uses: ${p.apps.filter((a) => a !== "none").join(", ") || "none"}`,
   ].filter(Boolean);
