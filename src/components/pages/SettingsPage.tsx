@@ -73,7 +73,7 @@ export function SettingsPage() {
             <label className="text-[13px] text-muted">Last name<input defaultValue={siteConfig.user.lastName} className={field} /></label>
             <label className="col-span-2 text-[13px] text-muted">Email<input defaultValue={siteConfig.user.email} className={field} /></label>
             <label className="col-span-2 text-[13px] text-muted">Role<input value={pf.role} placeholder="Your role" onChange={(e) => setPf({ ...pf, role: e.target.value })} className={field} /></label>
-            <label className="col-span-2 text-[13px] text-muted">How Nexora should help you<input value={pf.goals} placeholder="Separate with commas" onChange={(e) => setPf({ ...pf, goals: e.target.value })} className={field} /></label>
+            <label className="col-span-2 text-[13px] text-muted">How Sigge McDulle should help you<input value={pf.goals} placeholder="Separate with commas" onChange={(e) => setPf({ ...pf, goals: e.target.value })} className={field} /></label>
             <div className="col-span-2 text-[13px] text-muted">
               Apps your team uses
               <div className="mt-1.5 flex flex-wrap gap-1.5">

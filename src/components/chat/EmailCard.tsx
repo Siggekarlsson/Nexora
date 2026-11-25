@@ -40,7 +40,7 @@ export function EmailCard({ draft, onChange }: { draft: EmailDraft; onChange: (d
       body: JSON.stringify({ to: draft.to, cc: draft.cc, subject: draft.subject, body: draft.body, threadId: draft.threadId, mode }),
     })
       .then((res) => res.json())
-      .catch(() => ({ ok: false, error: "Nexora could not reach the server." }))) as Result;
+      .catch(() => ({ ok: false, error: "Sigge McDulle could not reach the server." }))) as Result;
     setBusy(null);
     if (r.ok) set({ status: mode === "send" ? "sent" : "saved", sentTo: r.to, link: r.link });
     else setError({ text: r.error, reconnect: r.reconnect });
